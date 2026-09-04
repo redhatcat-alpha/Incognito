@@ -42,6 +42,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { Markdown } from '@/components/forum/markdown';
+import { RichEditor } from '@/components/editor/rich-editor';
 import { ThreadAvatar } from '@/components/forum/thread-avatar';
 import { apiJson } from '@/lib/api';
 import { absoluteTime, relativeTime } from '@/lib/format';
@@ -406,14 +407,14 @@ export function ThreadView({ postId }: { postId: string }) {
   const now = useNow();
   const canEdit = Boolean(mine && post && post.status === 'published' && now !== null && now - post.createdAt <= EDIT_WINDOW_MS);
 
-  const quoteThis = useCallback(
-    (reply: ReplySummary) => {
-      setQuote({ replyId: reply.id, floorNo: reply.floorNo, alias: reply.alias });
-      draftRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      window.setTimeout(() => draftRef.current?.focus(), 300);
-    },
-    [],
-  );
+  const quoteThis = useCallback((reply: ReplySummary) => {
+    setQuote({ replyId: reply.id, floorNo: reply.floorNo, alias: reply.alias });
+    document.getElementById('reply-composer')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    window.setTimeout(() => {
+      const textarea = document.querySelector<HTMLTextAreaElement>('#reply-composer textarea');
+      textarea?.focus();
+    }, 300);
+  }, []);
 
   async function submitReply(event: { preventDefault: () => void }) {
     event.preventDefault();
@@ -652,7 +653,10 @@ export function ThreadView({ postId }: { postId: string }) {
         <div className="mb-3 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-base font-black">
             <MessageCircle className="size-4 text-[var(--signal-dark)]" /> 全部回复
-            <span className="text-sm font-normal text-muted-foreground">({thread.totalFloors - 1} 层)</span>
+            <span className="text-sm font-normal text-muted-foreground">
+              ({thread.replies.filter((reply) => reply.floorNo > 0).length} 层
+              {thread.replies.some((reply) => reply.floorNo === 0) ? ` · 含 ${thread.replies.filter((reply) => reply.floorNo === 0).length} 条层内回复` : ''})
+            </span>
           </h2>
           {readFloor > 1 ? (
             <p className="flex items-center gap-2 text-xs text-muted-foreground" aria-hidden="true">
@@ -708,24 +712,40 @@ export function ThreadView({ postId }: { postId: string }) {
             </div>
             {quote ? (
               <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-black/10 bg-[#f8faf6] px-3 py-2 text-sm">
-                <span className="text-muted-foreground">正在引用</span>
-                <span className="font-bold">{quote.floorNo} 楼 · {quote.alias}</span>
+                <span className="text-muted-foreground">正在引用{quote.floorNo > 0 ? ` ${quote.floorNo} 楼` : ''}</span>
+                <span className="font-bold">{quote.alias}</span>
                 <button type="button" className="ml-auto rounded-full px-2 py-0.5 text-xs font-bold text-destructive hover:bg-[#fdecea]" onClick={() => setQuote(null)}>
                   取消引用
                 </button>
               </div>
             ) : null}
-            <Textarea
-              ref={draftRef}
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder="友善、具体地说点什么。不要泄露自己或他人的隐私信息。"
-              className="min-h-24 border-black/15 bg-white leading-6"
-              maxLength={10000}
-              required
-            />
+            {quote ? (
+              <>
+                <Textarea
+                  ref={draftRef}
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  placeholder="回复层主的内容仅支持普通文字。"
+                  className="min-h-20 border-black/15 bg-white leading-6"
+                  maxLength={10000}
+                  required
+                />
+                <p className="mt-2 text-xs text-muted-foreground">层内回复仅支持普通文字 · 最大 10,000 字</p>
+              </>
+            ) : (
+              <>
+                <RichEditor
+                  id="reply-rich-editor"
+                  value={draft}
+                  onChange={setDraft}
+                  placeholder="友善、具体地说点什么。不要泄露自己或他人的隐私信息。"
+                  maxLength={10000}
+                  minHeightClass="min-h-32"
+                />
+                <p className="mt-2 text-xs text-muted-foreground">直接回复楼主的楼层内容支持富文本 · 最大 10,000 字</p>
+              </>
+            )}
             <div className="mt-3 flex items-center gap-3">
-              <p className="text-xs text-muted-foreground">支持受限 Markdown；最大 10,000 字</p>
               <span className="ml-auto text-xs text-muted-foreground">{draft.length}/10000</span>
               <Button type="submit" disabled={sending || !draft.trim()} className="rounded-full px-5">
                 {sending ? '正在发布…' : '匿名回复'}
@@ -865,6 +885,10 @@ function shortAlias(alias: string): string {
   return alias === '楼主' ? alias : alias.replace('匿名 ', '').trim() || alias;
 }
 
+function floorLabelOf(reply: ReplySummary): string {
+  return reply.floorNo > 0 ? `${reply.floorNo} 楼` : '层内回复';
+}
+
 /** 对层主的回复：默认一行紧凑展示“A → B 回复：…”，可展开为完整楼层 */
 function SubReplyRow({
   child,
@@ -891,18 +915,14 @@ function SubReplyRow({
   if (child.status === 'deleted') {
     return (
       <div className="flex items-center gap-2 border-t border-[#e5ebe1] px-3 py-2 text-xs text-muted-foreground first:border-t-0">
-        <span className="font-mono font-bold">{child.floorNo}F</span>
-        <span>· 内容已删除</span>
+        <span>层内回复 · 内容已删除</span>
       </div>
     );
   }
 
   return (
-    <div className="border-t border-[#e5ebe1] first:border-t-0" data-floor-no={child.floorNo}>
+    <div className="border-t border-[#e5ebe1] first:border-t-0">
       <div className="flex items-center gap-2 px-3 py-2 text-sm">
-        <span className="font-mono text-[11px] font-bold text-muted-foreground" aria-hidden="true">
-          {child.floorNo}F
-        </span>
         <span className={cn('font-bold', child.isOwner && 'text-[var(--signal-dark)]')}>{shortAlias(child.alias)}</span>
         <span className="text-xs text-muted-foreground" aria-hidden="true">→</span>
         <span className={cn('truncate font-bold', recipientAlias === null && 'text-muted-foreground')}>
@@ -918,7 +938,7 @@ function SubReplyRow({
         <button
           type="button"
           aria-expanded={showDetail}
-          aria-label={showDetail ? `收起 ${child.floorNo} 楼详情` : `展开 ${child.floorNo} 楼详情`}
+          aria-label={showDetail ? '收起这条层内回复详情' : '展开这条层内回复详情'}
           onClick={() => setShowDetail((value) => !value)}
           className={cn(
             'grid size-6 shrink-0 place-items-center rounded-full text-muted-foreground transition-transform hover:bg-black/5 hover:text-foreground',
@@ -1004,7 +1024,7 @@ function Floor({
   return (
     <article
       id={`floor-${reply.id}`}
-      data-floor-no={reply.floorNo}
+      data-floor-no={reply.floorNo > 0 ? reply.floorNo : undefined}
       className={cn(
         'scroll-mt-24 border',
         nested ? 'rounded-xl border-[#e5ebe1] bg-[#fbfdf8] p-3.5 sm:p-4' : 'rounded-2xl border-black/10 bg-white p-4 sm:p-5',
@@ -1016,15 +1036,17 @@ function Floor({
             <Trash2 className="size-3.5" />
           </span>
           <p className="text-sm text-muted-foreground">
-            <span className="font-bold">{reply.floorNo} 楼</span> · 内容已删除
+            <span className="font-bold">{reply.floorNo > 0 ? `${reply.floorNo} 楼` : '层内回复'}</span> · 内容已删除
           </p>
         </div>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <span className="rounded-full bg-[var(--ink)]/[0.05] px-2 py-0.5 font-mono text-[11px] font-bold text-muted-foreground" aria-label={`${reply.floorNo} 楼`}>
-              {reply.floorNo}F
-            </span>
+            {reply.floorNo > 0 ? (
+              <span className="rounded-full bg-[var(--ink)]/[0.05] px-2 py-0.5 font-mono text-[11px] font-bold text-muted-foreground" aria-label={`${reply.floorNo} 楼`}>
+                {reply.floorNo}F
+              </span>
+            ) : null}
             <div className="flex min-w-0 items-center gap-2">
               <ThreadAvatar seed={reply.avatarSeed} label={reply.alias.replace('匿名 ', '').replace('楼主', '主')} className={nested ? 'size-7' : 'size-8'} />
               <span className={cn('font-black', reply.isOwner && 'text-[var(--signal-dark)]')}>{reply.alias}</span>
@@ -1050,7 +1072,9 @@ function Floor({
                   </AlertDialogTrigger>
                   <AlertDialogContent className="border border-black/10 bg-[#f8faf6] p-6 sm:max-w-md">
                     <AlertDialogHeader>
-                      <AlertDialogTitle className="text-xl font-black tracking-tight">删除 {reply.floorNo} 楼的回复？</AlertDialogTitle>
+                      <AlertDialogTitle className="text-xl font-black tracking-tight">
+                        删除{reply.floorNo > 0 ? ` ${reply.floorNo} 楼的回复` : '这条层内回复'}？
+                      </AlertDialogTitle>
                       <AlertDialogDescription>楼层号会保留，但内容立即变为占位符，此操作不可撤销。</AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -1073,7 +1097,11 @@ function Floor({
           </div>
           {editing ? (
             <form onSubmit={(event) => void saveEdit(event)} className="mt-3">
-              <Textarea value={editDraft} onChange={(event) => setEditDraft(event.target.value)} className="border-black/15 bg-white" maxLength={10000} required />
+              {reply.floorNo > 0 ? (
+                <RichEditor id="floor-edit-body" value={editDraft} onChange={setEditDraft} minHeightClass="min-h-24" maxLength={10000} />
+              ) : (
+                <Textarea value={editDraft} onChange={(event) => setEditDraft(event.target.value)} className="border-black/15 bg-white" maxLength={10000} required />
+              )}
               <div className="mt-2 flex justify-end gap-2">
                 <Button type="button" variant="ghost" size="sm" className="rounded-full" onClick={() => setEditing(false)}>取消</Button>
                 <Button type="submit" size="sm" disabled={saving || !editDraft.trim()} className="rounded-full">{saving ? '保存中…' : '保存修改'}</Button>
@@ -1094,7 +1122,7 @@ function Floor({
                 <Button variant="ghost" size="sm" className="gap-1.5 rounded-full text-muted-foreground" onClick={onQuote}>
                   <MessageCircle className="size-3.5" />引用
                 </Button>
-                <ReportDialog targetType="reply" publicId={reply.id} floorLabel={`${reply.floorNo} 楼`} />
+                <ReportDialog targetType="reply" publicId={reply.id} floorLabel={floorLabelOf(reply)} />
               </div>
             </div>
           )}
@@ -1109,7 +1137,8 @@ function QuotedReply({ reply }: { reply: ReplySummary }) {
   return (
     <div className="mb-3 rounded-xl border-l-[3px] border-[var(--signal-dark)] bg-[#f8faf6] px-4 py-2.5 text-sm">
       <p className="text-xs font-bold text-muted-foreground">
-        {reply.alias || '匿名用户'} · {reply.floorNo} 楼
+        {reply.alias || '匿名用户'}
+        {reply.floorNo > 0 ? ` · ${reply.floorNo} 楼` : ' · 层内回复'}
       </p>
       <p className="mt-1 line-clamp-2 text-muted-foreground">{reply.body.slice(0, 120)}</p>
     </div>
@@ -1172,8 +1201,8 @@ function PostEditDialog({ post, onSaved }: { post: PostSummary; onSaved: (post: 
               <Input id="edit-title" value={title} onChange={(event) => setTitle(event.target.value)} className="h-10 border-black/15 bg-white" minLength={4} maxLength={120} required />
             </label>
             <label htmlFor="edit-body" className="grid gap-1.5 text-sm font-semibold">
-              正文
-              <Textarea id="edit-body" value={body} onChange={(event) => setBody(event.target.value)} className="min-h-36 border-black/15 bg-white leading-6" maxLength={20000} required />
+              正文 <span className="font-normal text-muted-foreground">支持富文本</span>
+              <RichEditor id="edit-body" value={body} onChange={setBody} maxLength={20000} minHeightClass="min-h-36" />
             </label>
             <label htmlFor="edit-tags" className="grid gap-1.5 text-sm font-semibold">
               标签 <span className="font-normal text-muted-foreground">逗号分隔，最多 5 个</span>

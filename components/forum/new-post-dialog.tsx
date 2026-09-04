@@ -14,10 +14,10 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { apiJson } from '@/lib/api';
 import type { BoardSummary, PostSummary, AuthMe } from '@/lib/forum-types';
 import { IdentityPicker, type Identity } from '@/components/forum/identity-picker';
+import { RichEditor } from '@/components/editor/rich-editor';
 
 export async function createPostRequest(input: {
   boardSlug: string;
@@ -130,15 +130,13 @@ export function NewPostDialog({
               />
             </label>
             <label htmlFor="new-post-body" className="grid gap-1.5 text-sm font-semibold">
-              正文
-              <Textarea
+              正文 <span className="font-normal text-muted-foreground">支持富文本（加粗、代码、引用等）</span>
+              <RichEditor
                 id="new-post-body"
                 value={body}
-                onChange={(event) => setBody(event.target.value)}
-                className="min-h-36 border-black/15 bg-white leading-6"
+                onChange={setBody}
                 placeholder="请避免泄露自己或他人的身份信息……"
                 maxLength={20000}
-                required
               />
             </label>
             <label htmlFor="new-post-tags" className="grid gap-1.5 text-sm font-semibold">

@@ -116,7 +116,8 @@ export const replies = sqliteTable(
     publicId: text('public_id').notNull(),
     postId: text('post_id').notNull().references(() => posts.id),
     authorId: text('author_id').notNull().references(() => anonymousUsers.id),
-    floorNo: integer('floor_no').notNull(),
+    // 楼层号：仅“直接回复楼主”的层内容占用（2、3、4…）；层内回复恒为 0
+    floorNo: integer('floor_no').notNull().default(0),
     body: text('body').notNull(),
     quoteReplyId: text('quote_reply_id'),
     status: text('status').notNull().default('published'),
@@ -127,7 +128,6 @@ export const replies = sqliteTable(
   },
   (table) => [
     uniqueIndex('uq_replies_public_id').on(table.publicId),
-    uniqueIndex('uq_replies_post_floor').on(table.postId, table.floorNo),
     index('idx_replies_post_status_floor').on(table.postId, table.status, table.floorNo),
   ],
 );

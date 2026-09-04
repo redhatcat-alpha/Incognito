@@ -452,7 +452,7 @@ export async function getThread(publicId: string, userId: string, regUserId?: st
          FROM replies r
          LEFT JOIN thread_aliases ta ON ta.post_id = r.post_id AND ta.user_id = r.author_id
          WHERE r.post_id = ? AND r.status IN ('published', 'deleted')
-         ORDER BY r.floor_no ASC
+         ORDER BY CASE WHEN r.floor_no = 0 THEN 1 ELSE 0 END, r.floor_no ASC, r.created_at ASC
          LIMIT 200`,
       )
       .bind(userId, post.id)
@@ -580,6 +580,15 @@ export async function createReply(
   if (post.status !== 'published') throw new Error('POST_LOCKED');
   if (post.board_status !== 'active') throw new Error('BOARD_READONLY');
 
+  // 引用目标必须属于同一帖子
+  if (quoteReplyId) {
+    const quoted = await db
+      .prepare("SELECT post_id FROM replies WHERE public_id = ? AND status IN ('published', 'deleted') LIMIT 1")
+      .bind(quoteReplyId)
+      .first<{ post_id: string }>();
+    if (!quoted || quoted.post_id !== post.id) throw new Error('TARGET_NOT_FOUND');
+  }
+
   const id = crypto.randomUUID();
   const publicId = crypto.randomUUID();
   const timestamp = Date.now();
@@ -595,28 +604,46 @@ export async function createReply(
         .bind(crypto.randomUUID(), post.id, authorId, crypto.randomUUID(), post.id),
     );
   }
-  statements.push(
-    db
-      .prepare(
-        `UPDATE posts
-         SET next_floor_no = next_floor_no + 1,
-             reply_count = reply_count + 1,
-             last_replied_at = ?, updated_at = ?
-         WHERE id = ? AND status = 'published'`,
-      )
-      .bind(timestamp, timestamp, post.id),
-    db
-      .prepare(
-        `INSERT INTO replies
-         (id, public_id, post_id, author_id, floor_no, body, quote_reply_id, status, up_count, down_count, created_at, updated_at)
-         SELECT ?, ?, id, ?, next_floor_no - 1, ?, ?, 'published', 0, 0, ?, ?
-         FROM posts WHERE id = ? AND status = 'published'`,
-      )
-      .bind(id, publicId, authorId, body, quoteReplyId ?? null, timestamp, timestamp, post.id),
-  );
+  const isDirect = !quoteReplyId;
+  if (isDirect) {
+    // 直接回复楼主：占用下一个楼层号并推进楼层计数
+    statements.push(
+      db
+        .prepare(
+          `UPDATE posts
+           SET next_floor_no = next_floor_no + 1,
+               reply_count = reply_count + 1,
+               last_replied_at = ?, updated_at = ?
+           WHERE id = ? AND status = 'published'`,
+        )
+        .bind(timestamp, timestamp, post.id),
+      db
+        .prepare(
+          `INSERT INTO replies
+           (id, public_id, post_id, author_id, floor_no, body, quote_reply_id, status, up_count, down_count, created_at, updated_at)
+           SELECT ?, ?, id, ?, next_floor_no - 1, ?, ?, 'published', 0, 0, ?, ?
+           FROM posts WHERE id = ? AND status = 'published'`,
+        )
+        .bind(id, publicId, authorId, body, null, timestamp, timestamp, post.id),
+    );
+  } else {
+    // 层内回复：不占楼层号（floor_no=0），不推进楼层计数，仅刷新活跃时间
+    statements.push(
+      db
+        .prepare("UPDATE posts SET last_replied_at = ?, updated_at = ? WHERE id = ? AND status = 'published'")
+        .bind(timestamp, timestamp, post.id),
+      db
+        .prepare(
+          `INSERT INTO replies
+           (id, public_id, post_id, author_id, floor_no, body, quote_reply_id, status, up_count, down_count, created_at, updated_at)
+           VALUES (?, ?, ?, ?, 0, ?, ?, 'published', 0, 0, ?, ?)`,
+        )
+        .bind(id, publicId, post.id, authorId, body, quoteReplyId, timestamp, timestamp),
+    );
+  }
   await db.batch(statements);
 
-  return { id: publicId };
+  return { id: publicId, floorNo: isDirect ? undefined : 0 };
 }
 
 export async function updatePost(

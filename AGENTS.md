@@ -79,7 +79,8 @@ db/schema.ts + drizzle/  # schema 与迁移（仅 SQLite/D1 方言）
 - 编辑时限：作者发布后 **30 分钟**内可编辑（服务端校验 `EDIT_WINDOW_EXPIRED`），删除不限时。
 - 投票：一人一票靠 `votes(user_id, target_type, target_id)` 唯一约束；不能投自己；三态 none/up/down。
 - 已读进度：`browsing_history` 每用户每帖一条；合并必须 `MAX(旧,新)` 单调；锚点取 `floor-{publicId}` 元素 id。
-- 楼层号：由 `posts.next_floor_no` 分配，删除不重排；唯一约束 `(post_id, floor_no)`。
+- 楼层号：**只**由“直接回复楼主”的层内容占用（`posts.next_floor_no`，删除不重排）；层内回复（带 `quote_reply_id`）`floor_no=0`，不推进计数、不占号（`replies` 已去掉 `(post_id,floor_no)` 唯一索引）。已读进度只按真实楼层统计。
+- 富文本边界：主帖正文与层内容（含编辑）用 `components/editor/rich-editor.tsx`（受限 Markdown + 预览）；层内回复及其编辑仅普通文字（`components/forum/thread-view.tsx` 按 `reply.floorNo>0` 分支）。
 - 举报：同一账号对同一目标仅一条（唯一约束 → `REPORT_EXISTS`），不能举报自己。
 - 隐私边界：日志/响应/审计不得出现 IP、UA、邮箱等；搜索词不进日志。
 - 只读/归档板块与锁定帖子：禁止新内容（`BOARD_READONLY` / `POST_LOCKED`），仍可浏览。
