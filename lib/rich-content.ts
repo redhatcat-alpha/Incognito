@@ -48,7 +48,7 @@ export function sanitizeRichHtml(raw: string): string {
       'h2', 'h3', 'code', 'pre', 'blockquote', 'ul', 'ol', 'li', 'a', 'img',
     ],
     ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'title', 'width', 'height', 'data-tieba-emoji'],
-    ALLOWED_URI_REGEXP: /^(?:https?:\/\/|mailto:|tel:|#)/i,
+    ALLOWED_URI_REGEXP: /^(?:(?:https?|ftp):\/\/|mailto:|tel:|#|\/)/i,
     RETURN_TRUSTED_TYPE: false,
   })
     .replace(/<a /g, '<a ')
