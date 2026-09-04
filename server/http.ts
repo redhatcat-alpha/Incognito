@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 
 const safeErrors: Record<string, { status: number; message: string }> = {
+  MEDIA_STORAGE_UNAVAILABLE: { status: 503, message: '媒体存储暂不可用' },
+  MEDIA_FILE_REQUIRED: { status: 400, message: '请上传图片文件' },
+  MEDIA_FILE_INVALID: { status: 400, message: '仅支持 2MB 以内的 JPG、PNG 或 WebP 图片' },
   RATE_LIMITED: { status: 429, message: '操作太频繁，请稍后再试' },
   BOARD_SLUG_EXISTS: { status: 409, message: '板块 slug 已存在' },
   BOARD_NOT_FOUND: { status: 404, message: '板块不存在或暂不可用' },
