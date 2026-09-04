@@ -272,13 +272,13 @@ export const adminSessions = sqliteTable(
   ],
 );
 
-/** 公告“已读”状态（按注册用户记录，跨设备生效；keyed by registered user id）。 */
+/** 公告“已读”状态按匿名身份记录，浏览无需注册；注册身份仍可复用同一行。 */
 export const announcementDismissals = sqliteTable(
   'announcement_dismissals',
   {
     id: text('id').primaryKey(),
     announcementId: text('announcement_id').notNull().references(() => announcements.id),
-    userId: text('user_id').notNull().references(() => registeredUsers.id),
+    userId: text('user_id').notNull().references(() => anonymousUsers.id),
     dismissedAt: integer('dismissed_at').notNull(),
   },
   (table) => [

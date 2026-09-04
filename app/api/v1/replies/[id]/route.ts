@@ -5,11 +5,9 @@ import { editReplySchema } from '@/server/forum/schemas';
 import { deleteReply, updateReply } from '@/server/forum/service';
 import { registeredAnonId } from '@/server/auth/registered';
 import { jsonError } from '@/server/http';
-import { requireRegisteredUser } from '@/server/auth/registered';
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    await requireRegisteredUser(request);
     const session = await ensureAnonymousSession(request);
     const { id } = await context.params;
     const input = editReplySchema.parse(await request.json());
@@ -23,7 +21,6 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
 export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    await requireRegisteredUser(request);
     const session = await ensureAnonymousSession(request);
     const { id } = await context.params;
     const regId = await registeredAnonId(request);

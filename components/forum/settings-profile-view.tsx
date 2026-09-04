@@ -138,6 +138,29 @@ export function SettingsProfileView() {
                 </p>
               </div>
             </div>
+            <div className="mt-4">
+              <p className="mb-2 text-xs font-bold text-muted-foreground">选择一个仅由随机主题组成的头像</p>
+              <div className="flex flex-wrap gap-2">
+                {['coral-orbit', 'blue-grid', 'lime-wave', 'violet-spark', 'amber-dots', 'mono-ring'].map((seed) => (
+                  <button
+                    key={seed}
+                    type="button"
+                    className={`rounded-full p-1 ${profile.avatarSeed === seed ? 'ring-2 ring-[var(--signal-dark)] ring-offset-2' : ''}`}
+                    aria-label={`选择头像 ${seed}`}
+                    onClick={async () => {
+                      try {
+                        await apiJson('/api/v1/anon/session', { method: 'PATCH', body: JSON.stringify({ avatarSeed: seed }) });
+                        setProfile((current) => (current ? { ...current, avatarSeed: seed } : current));
+                      } catch (cause) {
+                        setError(cause instanceof Error ? cause.message : '头像更新失败');
+                      }
+                    }}
+                  >
+                    <ThreadAvatar seed={seed} label="" className="size-10" />
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="mt-5 rounded-xl bg-[#f8faf6] p-4 text-sm leading-6 text-muted-foreground">
               <p className="flex items-start gap-2">
                 <ShieldCheck className="mt-0.5 size-4 shrink-0 text-[var(--signal-dark)]" />
@@ -278,7 +301,7 @@ function AccountSection({
     return (
       <Section
         title="注册账号与固定 ID"
-        description="本论坛需要登录后才能浏览与发言。注册无需邮箱或手机号，注册即获得唯一 ID。"
+        description="无需注册即可浏览、发帖和回复；注册仅用于需要固定 ID 的场景，且不收集邮箱或手机号。"
       >
         <Button className="rounded-full bg-[var(--ink)] px-5 text-white hover:bg-[var(--ink-soft)]" render={<Link href="/login" />}>
           前往登录 / 注册

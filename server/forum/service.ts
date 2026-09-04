@@ -1123,6 +1123,15 @@ export async function getAnonProfile(userId: string): Promise<AnonProfile> {
   };
 }
 
+export async function setAnonAvatar(userId: string, avatarSeed: string) {
+  const result = await getD1()
+    .prepare("UPDATE anonymous_users SET avatar_seed = ? WHERE id = ? AND status NOT IN ('deleted', 'deletion_pending')")
+    .bind(avatarSeed, userId)
+    .run();
+  if (result.meta.changes === 0) throw new Error('POST_NOT_FOUND');
+  return { avatarSeed };
+}
+
 export async function listAnonSessions(userId: string): Promise<AnonSessionInfo[]> {
   const result = await getD1()
     .prepare('SELECT id, created_at, last_used_at, expires_at, revoked_at FROM anonymous_sessions WHERE user_id = ? ORDER BY created_at DESC LIMIT 20')

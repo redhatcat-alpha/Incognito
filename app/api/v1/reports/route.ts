@@ -4,11 +4,9 @@ import { applySessionCookie, ensureAnonymousSession } from '@/server/auth/anonym
 import { reportSchema } from '@/server/forum/schemas';
 import { createReport } from '@/server/forum/service';
 import { jsonError } from '@/server/http';
-import { requireRegisteredUser } from '@/server/auth/registered';
 
 export async function POST(request: Request) {
   try {
-    await requireRegisteredUser(request);
     const session = await ensureAnonymousSession(request);
     const input = reportSchema.parse(await request.json());
     const data = await createReport(session.userId, input);

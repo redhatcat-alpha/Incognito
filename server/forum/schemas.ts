@@ -51,6 +51,10 @@ export const sessionPatchSchema = z.object({
   historySyncEnabled: z.boolean(),
 });
 
+export const avatarPatchSchema = z.object({
+  avatarSeed: z.string().trim().min(1).max(40).regex(/^[a-z0-9-]+$/),
+});
+
 const usernameSchema = z
   .string()
   .trim()
@@ -74,4 +78,3 @@ export const loginSchema = z.object({
   username: usernameSchema,
   password: z.string().min(1, '请输入密码').max(72),
 });
-

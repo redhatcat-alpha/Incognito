@@ -5,11 +5,9 @@ import { deletePost, getThread, updatePost } from '@/server/forum/service';
 import { registeredAnonId } from '@/server/auth/registered';
 import { editPostSchema } from '@/server/forum/schemas';
 import { jsonError } from '@/server/http';
-import { requireRegisteredUser } from '@/server/auth/registered';
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    await requireRegisteredUser(request);
     const session = await ensureAnonymousSession(request);
     const { id } = await context.params;
     const regId = await registeredAnonId(request);
@@ -28,7 +26,6 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    await requireRegisteredUser(request);
     const session = await ensureAnonymousSession(request);
     const { id } = await context.params;
     const input = editPostSchema.parse(await request.json());
@@ -42,7 +39,6 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
 export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    await requireRegisteredUser(request);
     const session = await ensureAnonymousSession(request);
     const { id } = await context.params;
     const regId = await registeredAnonId(request);
