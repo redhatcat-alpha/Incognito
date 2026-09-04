@@ -373,6 +373,9 @@ export function ThreadView({ postId }: { postId: string }) {
 
   const quoteMap = useMemo(() => new Map(thread?.replies.map((reply) => [reply.id, reply]) ?? []), [thread]);
 
+  // 楼主的展示名（匿名楼主显示为“楼主”）
+  const opAlias = thread?.post.authorName ?? '楼主';
+
   // 分层会话模型：直接回复楼主(无引用)的楼层为顶层，其余回复按引用链归入对应顶层楼层
   const layers = useMemo(() => {
     if (!thread) return [];
@@ -688,6 +691,7 @@ export function ThreadView({ postId }: { postId: string }) {
                 onChanged={() => { void load(); }}
                 notify={setNotice}
                 busyIds={busyVotes}
+                opAlias={opAlias}
               />
             ))}
           </div>
@@ -812,6 +816,7 @@ function FloorLayer({
   onChanged,
   notify,
   busyIds,
+  opAlias,
 }: {
   layer: FloorLayerModel;
   postStatus: string;
@@ -821,6 +826,7 @@ function FloorLayer({
   onChanged: () => void;
   notify: (notice: GlobalNotice) => void;
   busyIds: Set<string>;
+  opAlias: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const { root, children } = layer;
@@ -855,6 +861,7 @@ function FloorLayer({
                   onChanged={onChanged}
                   notify={notify}
                   voteBusy={busyIds.has(`reply:${child.id}`)}
+                  identityTag={child.alias ? (child.alias === opAlias ? '楼主' : child.alias === layer.root.alias ? '层主' : null) : null}
                 />
               ))}
               {children.length > PREVIEW_SUB_REPLIES ? (
@@ -901,6 +908,7 @@ function SubReplyRow({
   onChanged,
   notify,
   voteBusy,
+  identityTag = null,
 }: {
   child: ReplySummary;
   postStatus: string;
@@ -910,6 +918,7 @@ function SubReplyRow({
   onChanged: () => void;
   notify: (notice: GlobalNotice) => void;
   voteBusy: boolean;
+  identityTag?: '楼主' | '层主' | null;
 }) {
   const [showDetail, setShowDetail] = useState(false);
   const recipientAlias = child.quoteReplyId ? (quotedReply?.status === 'published' ? quotedReply.alias : null) : null;
@@ -925,9 +934,25 @@ function SubReplyRow({
   return (
     <div className="border-t border-[#e5ebe1] first:border-t-0">
       <div className="flex items-center gap-2 px-3 py-2 text-sm">
-        <span className={cn('font-bold', child.isOwner && 'text-[var(--signal-dark)]')}>{shortAlias(child.alias)}</span>
-        <span className="text-xs text-muted-foreground" aria-hidden="true">→</span>
-        <span className={cn('truncate font-bold', recipientAlias === null && 'text-muted-foreground')}>
+        <span className="inline-flex min-w-0 items-center gap-1.5">
+          {identityTag === '楼主' ? (
+            <span className="shrink-0 rounded-full bg-[var(--signal)] px-1.5 py-px text-[10px] font-black text-[var(--ink)]">楼主</span>
+          ) : null}
+          {identityTag === '层主' ? (
+            <span className="shrink-0 rounded-full bg-[#dcebff] px-1.5 py-px text-[10px] font-black text-[#1e66d6]">层主</span>
+          ) : null}
+          <span
+            className={cn(
+              'truncate font-bold',
+              identityTag === '楼主' && 'text-[var(--signal-dark)]',
+              identityTag === '层主' && 'text-[#1e66d6]',
+            )}
+          >
+            {shortAlias(child.alias)}
+          </span>
+        </span>
+        <span className="shrink-0 text-xs text-muted-foreground" aria-hidden="true">→</span>
+        <span className={cn('truncate font-bold text-muted-foreground')}>
           {recipientAlias === null ? (child.quoteReplyId ? '已删除楼层' : shortAlias(child.alias)) : shortAlias(recipientAlias)}
         </span>
         <span className="shrink-0 text-muted-foreground" aria-hidden="true">回复：</span>
@@ -968,6 +993,7 @@ function SubReplyRow({
     </div>
   );
 }
+
 
 function Floor({
   reply,

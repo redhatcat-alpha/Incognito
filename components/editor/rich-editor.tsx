@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
-import ImageExtension from '@tiptap/extension-image';
 import LinkExtension from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
 import { EditorContent, useEditor } from '@tiptap/react';
@@ -24,6 +23,7 @@ import {
   Undo2,
 } from 'lucide-react';
 
+import { TiebaEmoji } from '@/components/editor/tieba-emoji-extension';
 import { isRichHtml, mdToHtmlLight } from '@/lib/rich-content';
 import { tiebaEmojis } from '@/lib/tieba-emojis';
 import { cn } from '@/lib/utils';
@@ -49,7 +49,7 @@ export function RichEditor({ initialContent = '', onChange, placeholder, minHeig
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: { levels: [2, 3] } }),
-      ImageExtension.configure({ allowBase64: false, HTMLAttributes: { loading: 'lazy' } }),
+      TiebaEmoji,
       LinkExtension.configure({ openOnClick: false, autolink: true, HTMLAttributes: { rel: 'noreferrer noopener', target: '_blank' } }),
       Placeholder.configure({ placeholder: placeholder ?? '开始输入…' }),
     ],
@@ -75,7 +75,7 @@ export function RichEditor({ initialContent = '', onChange, placeholder, minHeig
       .chain()
       .focus()
       .insertContent({
-        type: 'image',
+        type: 'tiebaEmoji',
         attrs: { src, alt: `贴吧表情 ${emojiId}`, title: `贴吧表情 ${emojiId}`, width: 22, height: 22 },
       })
       .run();

@@ -47,7 +47,7 @@ export function sanitizeRichHtml(raw: string): string {
       'p', 'br', 'strong', 'b', 'em', 'i', 's', 'strike',
       'h2', 'h3', 'code', 'pre', 'blockquote', 'ul', 'ol', 'li', 'a', 'img',
     ],
-    ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'title', 'width', 'height'],
+    ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'title', 'width', 'height', 'data-tieba-emoji'],
     ALLOWED_URI_REGEXP: /^(?:https?:\/\/|mailto:|tel:|#)/i,
     RETURN_TRUSTED_TYPE: false,
   })
