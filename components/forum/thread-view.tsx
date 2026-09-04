@@ -726,33 +726,22 @@ export function ThreadView({ postId }: { postId: string }) {
                 </button>
               </div>
             ) : null}
-            {quote ? (
-              <>
-                <Textarea
-                  ref={draftRef}
-                  value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
-                  placeholder="回复层主的内容仅支持普通文字。"
-                  className="min-h-20 border-black/15 bg-white leading-6"
-                  maxLength={10000}
-                  required
-                />
-                <p className="mt-2 text-xs text-muted-foreground">层内回复仅支持普通文字 · 最大 10,000 字</p>
-              </>
-            ) : (
-              <>
-                <RichEditor
-                  key={`reply-editor-${editorNonce}`}
-                  initialContent={draft}
-                  onChange={setDraft}
-                  placeholder="友善、具体地说点什么。不要泄露自己或他人的隐私信息。"
-                  minHeightClass="min-h-32"
-                />
-                <p className="mt-2 text-xs text-muted-foreground">直接回复楼主的楼层内容支持富文本 · 最大 10,000 字</p>
-              </>
-            )}
+            <RichEditor
+              key={`reply-editor-${editorNonce}-${quote ? 'sub' : 'direct'}`}
+              initialContent={draft}
+              onChange={setDraft}
+              placeholder={
+                quote
+                  ? '回复层主：支持文字与贴吧表情包。'
+                  : '友善、具体地说点什么。不要泄露自己或他人的隐私信息。'
+              }
+              minHeightClass="min-h-32"
+            />
+            <p className="mt-2 text-xs text-muted-foreground">
+              {quote ? '层内回复：支持文字、富文本与贴吧表情包' : '直接回复楼主的楼层内容：支持富文本与贴吧表情包'} · 最大 10,000 字
+            </p>
             <div className="mt-3 flex items-center gap-3">
-              <span className="ml-auto text-xs text-muted-foreground">{quote ? draft.length : htmlTextLength(draft)}/10000 字</span>
+              <span className="ml-auto text-xs text-muted-foreground">{htmlTextLength(draft)}/10000 字</span>
               <Button type="submit" disabled={sending || !htmlHasText(draft)} className="rounded-full px-5">
                 {sending ? '正在发布…' : '匿名回复'}
               </Button>
@@ -922,6 +911,11 @@ function SubReplyRow({
 }) {
   const [showDetail, setShowDetail] = useState(false);
   const recipientAlias = child.quoteReplyId ? (quotedReply?.status === 'published' ? quotedReply.alias : null) : null;
+  const bodyPreview = (() => {
+    const plain = stripHtmlText(child.body);
+    if (plain) return plain;
+    return /\/emoji\/tieba\//.test(child.body) || child.body.includes('data-tieba-emoji') ? '[贴吧表情]' : '';
+  })();
 
   if (child.status === 'deleted') {
     return (
@@ -956,8 +950,8 @@ function SubReplyRow({
           {recipientAlias === null ? (child.quoteReplyId ? '已删除楼层' : shortAlias(child.alias)) : shortAlias(recipientAlias)}
         </span>
         <span className="shrink-0 text-muted-foreground" aria-hidden="true">回复：</span>
-        <span className="min-w-0 flex-1 truncate text-[var(--ink)]" title={stripHtmlText(child.body)}>
-          {stripHtmlText(child.body)}
+        <span className="min-w-0 flex-1 truncate text-[var(--ink)]" title={bodyPreview}>
+          {bodyPreview}
         </span>
         <span className="shrink-0 text-[11px] text-muted-foreground" title={absoluteTime(child.createdAt)}>
           {relativeTime(child.createdAt)}
@@ -1125,11 +1119,12 @@ function Floor({
           </div>
           {editing ? (
             <form onSubmit={(event) => void saveEdit(event)} className="mt-3">
-              {reply.floorNo > 0 ? (
-                <RichEditor initialContent={editDraft} onChange={setEditDraft} minHeightClass="min-h-24" />
-              ) : (
-                <Textarea value={editDraft} onChange={(event) => setEditDraft(event.target.value)} className="border-black/15 bg-white" maxLength={10000} required />
-              )}
+              <RichEditor
+                key={`floor-edit-${reply.floorNo}-${editing}`}
+                initialContent={editDraft}
+                onChange={setEditDraft}
+                minHeightClass="min-h-24"
+              />
               <div className="mt-2 flex justify-end gap-2">
                 <Button type="button" variant="ghost" size="sm" className="rounded-full" onClick={() => setEditing(false)}>取消</Button>
                 <Button type="submit" size="sm" disabled={saving || !editDraft.trim()} className="rounded-full">{saving ? '保存中…' : '保存修改'}</Button>
