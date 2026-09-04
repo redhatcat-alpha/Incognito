@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { apiJson } from '@/lib/api';
 import { absoluteTime } from '@/lib/format';
-import type { AdminAnnouncement } from '@/lib/forum-types';
+import type { AdminAnnouncement, BoardSummary } from '@/lib/forum-types';
 import { cn } from '@/lib/utils';
 
 const levels = [
@@ -42,6 +42,7 @@ export function AdminConsole() {
 
   const [list, setList] = useState<AdminAnnouncement[]>([]);
   const [reports, setReports] = useState<AdminReport[]>([]);
+  const [boards, setBoards] = useState<BoardSummary[]>([]);
   const [siteSettings, setSiteSettings] = useState({ name: '', shortName: '', description: '', primaryColor: '#d9ff57' });
   const [savingSettings, setSavingSettings] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -54,6 +55,7 @@ export function AdminConsole() {
       setReports(reportData);
       const settingsData = await apiJson<typeof siteSettings>('/api/v1/admin/site-settings');
       setSiteSettings(settingsData);
+      setBoards(await apiJson<BoardSummary[]>('/api/v1/admin/boards'));
     } catch {
       // 列表加载失败静默
     }
@@ -154,6 +156,13 @@ export function AdminConsole() {
   async function reviewReport(id: string, status: 'resolved' | 'rejected', hideTarget: boolean) {
     try { await apiJson(`/api/v1/admin/reports/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ status, hideTarget }) }); flash(status === 'resolved' ? '举报已处理' : '举报已驳回'); void refreshList(); }
     catch (cause) { flash(cause instanceof Error ? cause.message : '处理失败'); }
+  }
+
+  async function saveBoard(board: BoardSummary) {
+    try {
+      await apiJson(`/api/v1/admin/boards/${encodeURIComponent(board.slug)}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: board.name, description: board.description, icon: board.icon, accent: board.accent, status: board.status, sortOrder: boards.indexOf(board) }) });
+      flash(`板块「${board.name}」已保存`);
+    } catch (cause) { flash(cause instanceof Error ? cause.message : '板块保存失败'); }
   }
 
   if (checking) {
@@ -266,6 +275,23 @@ export function AdminConsole() {
               </Button>
             </div>
           </form>
+        </section>
+
+        <section className="rounded-2xl border border-black/10 bg-white p-6">
+          <h2 className="text-lg font-black tracking-tight">板块管理</h2>
+          <p className="mt-1 text-sm text-muted-foreground">编辑板块展示信息、状态和排序；隐藏板块不会出现在前台。</p>
+          <div className="mt-4 grid gap-3">
+            {boards.map((board, index) => (
+              <div key={board.slug} className="rounded-xl border border-black/10 bg-[#f8faf6] p-4">
+                <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+                  <label className="grid gap-1 text-xs font-bold">名称<input className="h-9 rounded-lg border border-black/15 bg-white px-2 text-sm font-normal" value={board.name} onChange={(e) => setBoards((items) => items.map((item) => item.slug === board.slug ? { ...item, name: e.target.value } : item))} /></label>
+                  <label className="grid gap-1 text-xs font-bold">描述<input className="h-9 rounded-lg border border-black/15 bg-white px-2 text-sm font-normal" value={board.description} onChange={(e) => setBoards((items) => items.map((item) => item.slug === board.slug ? { ...item, description: e.target.value } : item))} /></label>
+                  <label className="grid gap-1 text-xs font-bold">状态<select className="h-9 rounded-lg border border-black/15 bg-white px-2 text-sm" value={board.status} onChange={(e) => setBoards((items) => items.map((item) => item.slug === board.slug ? { ...item, status: e.target.value as BoardSummary['status'] } : item))}><option value="active">正常</option><option value="readonly">只读</option><option value="archived">归档</option><option value="hidden">隐藏</option></select></label>
+                </div>
+                <div className="mt-3 flex items-center justify-between"><span className="text-xs text-muted-foreground">/{board.slug} · {board.postCount} 篇帖子 · 排序 {index + 1}</span><Button size="sm" className="h-8 rounded-full" onClick={() => void saveBoard(board)}>保存</Button></div>
+              </div>
+            ))}
+          </div>
         </section>
 
         <section className="rounded-2xl border border-black/10 bg-white p-6">
