@@ -813,12 +813,11 @@ function FloorLayer({
             <p className="px-1 text-[11px] font-black uppercase tracking-[0.14em] text-muted-foreground">
               回复本层 · {children.length} 条
             </p>
-            <div className="mt-2 space-y-2.5">
+            <div className="mt-2 overflow-hidden rounded-xl border border-[#e5ebe1] bg-[#fbfdf8]">
               {shown.map((child) => (
-                <Floor
+                <SubReplyRow
                   key={child.id}
-                  reply={child}
-                  nested
+                  child={child}
                   postStatus={postStatus}
                   quotedReply={child.quoteReplyId ? quoteMap.get(child.quoteReplyId) : undefined}
                   onQuote={() => onQuote(child)}
@@ -828,29 +827,115 @@ function FloorLayer({
                   voteBusy={busyIds.has(`reply:${child.id}`)}
                 />
               ))}
+              {children.length > PREVIEW_SUB_REPLIES ? (
+                <button
+                  type="button"
+                  aria-expanded={expanded}
+                  onClick={() => setExpanded((value) => !value)}
+                  className="flex w-full items-center justify-center gap-2 border-t border-[#e5ebe1] bg-white/50 px-4 py-2.5 text-sm font-bold text-muted-foreground transition-colors hover:bg-white hover:text-foreground"
+                >
+                  {expanded ? (
+                    <>
+                      <ChevronUp className="size-4" /> 收起本层回复
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="size-4" /> 展开其余 {hiddenCount} 条回复
+                    </>
+                  )}
+                </button>
+              ) : null}
             </div>
-            {children.length > PREVIEW_SUB_REPLIES ? (
-              <button
-                type="button"
-                aria-expanded={expanded}
-                onClick={() => setExpanded((value) => !value)}
-                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-black/15 bg-[#f8faf6] px-4 py-2.5 text-sm font-bold text-muted-foreground transition-colors hover:border-black/30 hover:text-foreground"
-              >
-                {expanded ? (
-                  <>
-                    <ChevronUp className="size-4" /> 收起本层回复
-                  </>
-                ) : (
-                  <>
-                    <ChevronDown className="size-4" /> 展开其余 {hiddenCount} 条回复
-                  </>
-                )}
-              </button>
-            ) : null}
           </div>
         ) : undefined
       }
     />
+  );
+}
+
+function shortAlias(alias: string): string {
+  return alias === '楼主' ? alias : alias.replace('匿名 ', '').trim() || alias;
+}
+
+/** 对层主的回复：默认一行紧凑展示“A → B 回复：…”，可展开为完整楼层 */
+function SubReplyRow({
+  child,
+  postStatus,
+  quotedReply,
+  onQuote,
+  onVote,
+  onChanged,
+  notify,
+  voteBusy,
+}: {
+  child: ReplySummary;
+  postStatus: string;
+  quotedReply: ReplySummary | undefined;
+  onQuote: () => void;
+  onVote: (value: -1 | 0 | 1) => void;
+  onChanged: () => void;
+  notify: (notice: GlobalNotice) => void;
+  voteBusy: boolean;
+}) {
+  const [showDetail, setShowDetail] = useState(false);
+  const recipientAlias = child.quoteReplyId ? (quotedReply?.status === 'published' ? quotedReply.alias : null) : null;
+
+  if (child.status === 'deleted') {
+    return (
+      <div className="flex items-center gap-2 border-t border-[#e5ebe1] px-3 py-2 text-xs text-muted-foreground first:border-t-0">
+        <span className="font-mono font-bold">{child.floorNo}F</span>
+        <span>· 内容已删除</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-t border-[#e5ebe1] first:border-t-0" data-floor-no={child.floorNo}>
+      <div className="flex items-center gap-2 px-3 py-2 text-sm">
+        <span className="font-mono text-[11px] font-bold text-muted-foreground" aria-hidden="true">
+          {child.floorNo}F
+        </span>
+        <span className={cn('font-bold', child.isOwner && 'text-[var(--signal-dark)]')}>{shortAlias(child.alias)}</span>
+        <span className="text-xs text-muted-foreground" aria-hidden="true">→</span>
+        <span className={cn('truncate font-bold', recipientAlias === null && 'text-muted-foreground')}>
+          {recipientAlias === null ? (child.quoteReplyId ? '已删除楼层' : shortAlias(child.alias)) : shortAlias(recipientAlias)}
+        </span>
+        <span className="shrink-0 text-muted-foreground" aria-hidden="true">回复：</span>
+        <span className="min-w-0 flex-1 truncate text-[var(--ink)]" title={child.body}>
+          {child.body}
+        </span>
+        <span className="shrink-0 text-[11px] text-muted-foreground" title={absoluteTime(child.createdAt)}>
+          {relativeTime(child.createdAt)}
+        </span>
+        <button
+          type="button"
+          aria-expanded={showDetail}
+          aria-label={showDetail ? `收起 ${child.floorNo} 楼详情` : `展开 ${child.floorNo} 楼详情`}
+          onClick={() => setShowDetail((value) => !value)}
+          className={cn(
+            'grid size-6 shrink-0 place-items-center rounded-full text-muted-foreground transition-transform hover:bg-black/5 hover:text-foreground',
+            showDetail && 'rotate-180',
+          )}
+        >
+          <ChevronDown className="size-4" />
+        </button>
+      </div>
+      {showDetail ? (
+        <div className="border-t border-[#e5ebe1] bg-white p-2.5 sm:p-3">
+          <Floor
+            reply={child}
+            nested
+            postStatus={postStatus}
+            quotedReply={quotedReply}
+            onQuote={onQuote}
+            onVote={onVote}
+            onChanged={onChanged}
+            notify={notify}
+            voteBusy={voteBusy}
+          />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
