@@ -12,6 +12,12 @@
 - **线程内代号**：同一帖子内同一账号显示固定「匿名 A1/A2…」，楼主显示「楼主」；代号来自 `thread_aliases`，跨帖子不可直接关联。公开 DTO 永不返回内部 `user_id`。
 - 内容删除是**软删除**（`status='deleted'`、清空标题/正文、楼层号不重排）；销毁身份 = 撤销全部会话 + 删历史/投票（并回滚目标计数）+ 内容转占位。
 
+## 超级管理员（admin）
+
+- `admin_users` / `admin_sessions` 独立于注册用户体系（PRD：管理员与匿名身份分离，不共会话）。模块：`server/auth/admin.ts`。
+- 默认账号 `admin/admin123`（role `super_admin`）：`loginAdmin` 在每次登录前幂等种子（缺账号自动重建）。改默认密码流程：直接更新 `admin_users.pass_hash`（用 `hashPassword`）。
+- 现有接口仅 `/api/v1/admin/login|logout|me`；管理控制台页面与内容治理 API 未实现。任何新的管理写操作必须校验 `getAdminUser(request)` 且记审计（见 PRD MOD-002）。
+
 ## 登录门槛（2026-09 起）
 
 - 浏览与发言都要求登录：全部 `/api/v1/*` 内容路由在 `ensureAnonymousSession` 之前先 `requireRegisteredUser(request)`（未登录统一 401 `AUTH_REQUIRED`）。

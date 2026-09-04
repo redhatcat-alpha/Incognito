@@ -240,3 +240,34 @@ export const siteSettings = sqliteTable('site_settings', {
   settingsJson: text('settings_json').notNull(),
   createdAt: integer('created_at').notNull(),
 });
+
+/** 管理员账号，与普通注册用户完全分离（独立表、独立会话）。 */
+export const adminUsers = sqliteTable(
+  'admin_users',
+  {
+    id: text('id').primaryKey(),
+    username: text('username').notNull(),
+    passHash: text('pass_hash').notNull(),
+    role: text('role').notNull().default('admin'),
+    status: text('status').notNull().default('active'),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [uniqueIndex('uq_admin_users_username').on(table.username)],
+);
+
+export const adminSessions = sqliteTable(
+  'admin_sessions',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull().references(() => adminUsers.id),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: integer('expires_at').notNull(),
+    createdAt: integer('created_at').notNull(),
+    lastUsedAt: integer('last_used_at').notNull(),
+    revokedAt: integer('revoked_at'),
+  },
+  (table) => [
+    uniqueIndex('uq_admin_sessions_token_hash').on(table.tokenHash),
+    index('idx_admin_sessions_user_id').on(table.userId),
+  ],
+);
