@@ -12,6 +12,12 @@
 - **线程内代号**：同一帖子内同一账号显示固定「匿名 A1/A2…」，楼主显示「楼主」；代号来自 `thread_aliases`，跨帖子不可直接关联。公开 DTO 永不返回内部 `user_id`。
 - 内容删除是**软删除**（`status='deleted'`、清空标题/正文、楼层号不重排）；销毁身份 = 撤销全部会话 + 删历史/投票（并回滚目标计数）+ 内容转占位。
 
+## 登录门槛（2026-09 起）
+
+- 浏览与发言都要求登录：全部 `/api/v1/*` 内容路由在 `ensureAnonymousSession` 之前先 `requireRegisteredUser(request)`（未登录统一 401 `AUTH_REQUIRED`）。
+- 客户端统一在 `ForumShell` 内做门槛：`useRegisteredUser` 未登录时 `router.replace('/login?next=…')`；登录页是独立页面 `/login`（不用 ForumShell，避免重定向环），登录成功后回跳 `next`。
+- 匿名发言仍是“登录后的选项”：匿名身份（匿名 cookie 行）在登录后首次内容请求时自动创建；退出登录只清注册会话，匿名设备身份保留，但 API 门槛保证未登录无法读写。
+
 ## 账号与发言身份模型（重要）
 
 - 游客永远可用（自动匿名账号）。用户可额外「注册」：`registered_users` 建一行账号，同时在同一 ID 空间建一行 `anonymous_users`（作为署名身份行），**posts/replies.author_id 外键零改动**。

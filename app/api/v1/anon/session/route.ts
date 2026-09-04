@@ -4,9 +4,11 @@ import { applySessionCookie, clearSessionCookie, ensureAnonymousSession, revokeS
 import { sessionPatchSchema } from '@/server/forum/schemas';
 import { getAnonProfile, setHistorySync } from '@/server/forum/service';
 import { jsonError } from '@/server/http';
+import { requireRegisteredUser } from '@/server/auth/registered';
 
 export async function GET(request: Request) {
   try {
+    await requireRegisteredUser(request);
     const session = await ensureAnonymousSession(request);
     const profile = await getAnonProfile(session.userId);
     return applySessionCookie(NextResponse.json({ data: { profile }, error: null }), session);
@@ -17,6 +19,7 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
+    await requireRegisteredUser(request);
     const session = await ensureAnonymousSession(request);
     const input = sessionPatchSchema.parse(await request.json());
     const data = await setHistorySync(session.userId, input.historySyncEnabled);
@@ -28,6 +31,7 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    await requireRegisteredUser(request);
     const session = await ensureAnonymousSession(request);
     await revokeSessionForRequest(request);
     const response = NextResponse.json({ data: { loggedOut: true }, error: null });

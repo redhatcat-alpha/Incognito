@@ -4,9 +4,11 @@ import { applySessionCookie, ensureAnonymousSession } from '@/server/auth/anonym
 import { progressSchema } from '@/server/forum/schemas';
 import { clearHistory, saveProgress } from '@/server/forum/service';
 import { jsonError } from '@/server/http';
+import { requireRegisteredUser } from '@/server/auth/registered';
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    await requireRegisteredUser(request);
     const session = await ensureAnonymousSession(request);
     const { id } = await context.params;
     const input = progressSchema.parse(await request.json());
@@ -19,6 +21,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
 
 export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    await requireRegisteredUser(request);
     const session = await ensureAnonymousSession(request);
     const { id } = await context.params;
     await clearHistory(session.userId, id);

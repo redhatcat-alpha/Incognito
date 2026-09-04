@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useRegisteredUser } from '@/lib/use-registered-user';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Bell,
@@ -176,7 +177,26 @@ export function AnnouncementStrip({ boardSlug }: { boardSlug?: string }) {
 export function ForumShell({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { me, loading } = useRegisteredUser();
   const { boards, offline } = useBoardList();
+
+  // 全站访问门槛：未登录一律重定向到独立的登录/注册页
+  const authed = !loading && me !== null;
+  useEffect(() => {
+    if (loading || me) return;
+    const next = `${pathname}${window.location.search}`;
+    if (pathname !== '/login') router.replace(`/login?next=${encodeURIComponent(next)}`);
+  }, [loading, me, pathname, router]);
+  if (loading || !authed) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-background text-foreground">
+        <div className="flex items-center gap-3 text-sm font-bold text-muted-foreground">
+          <span className="size-8 animate-spin rounded-full border-2 border-[var(--line)] border-t-[var(--signal-dark)]" aria-hidden="true" />
+          正在确认登录状态…
+        </div>
+      </div>
+    );
+  }
 
   function runSearch(form: HTMLFormElement) {
     const raw = new FormData(form).get('q');
@@ -309,11 +329,13 @@ export function ForumShell({ children, right }: { children: React.ReactNode; rig
             <div className="rounded-2xl border border-black/10 bg-white p-4 text-sm leading-6">
               <p className="mb-2 flex items-center gap-2 font-bold">
                 <span className="size-2 rounded-full bg-emerald-500" />
-                匿名会话有效
+                已登录：{me?.username ?? '…'}
               </p>
-              <p className="text-muted-foreground">身份仅保存在当前浏览器，可随时在设置中查看或销毁。</p>
-              <Link href="/settings/privacy" className="mt-2 inline-block font-bold text-[var(--signal-dark)] underline underline-offset-4">
-                管理隐私
+              <p className="text-muted-foreground">
+                每次发言都可选「匿名」或「固定 ID」，可在设置中退出登录。
+              </p>
+              <Link href="/settings/profile" className="mt-2 inline-block font-bold text-[var(--signal-dark)] underline underline-offset-4">
+                管理账号与隐私
               </Link>
             </div>
           </div>

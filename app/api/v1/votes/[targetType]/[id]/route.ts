@@ -6,6 +6,7 @@ import { voteSchema } from '@/server/forum/schemas';
 import { setVote } from '@/server/forum/service';
 import { registeredAnonId } from '@/server/auth/registered';
 import { jsonError } from '@/server/http';
+import { requireRegisteredUser } from '@/server/auth/registered';
 
 const targetTypeSchema = z.enum(['post', 'reply']);
 
@@ -14,6 +15,7 @@ export async function PUT(
   context: { params: Promise<{ targetType: string; id: string }> },
 ) {
   try {
+    await requireRegisteredUser(request);
     const session = await ensureAnonymousSession(request);
     const params = await context.params;
     const targetType = targetTypeSchema.parse(params.targetType);

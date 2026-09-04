@@ -208,3 +208,10 @@ export async function registeredAnonId(request: Request): Promise<string | null>
   const user = await getRegisteredUser(request);
   return user?.id ?? null;
 }
+
+/** 访问门槛：未登录直接抛 401（由 jsonError 统一转为安全文案）。 */
+export async function requireRegisteredUser(request: Request): Promise<RegisteredUser> {
+  const user = await getRegisteredUser(request);
+  if (!user) throw new Error('AUTH_REQUIRED');
+  return user;
+}

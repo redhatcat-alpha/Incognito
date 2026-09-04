@@ -5,9 +5,11 @@ import { createPostSchema } from '@/server/forum/schemas';
 import { createPost, listForum } from '@/server/forum/service';
 import { registeredAnonId } from '@/server/auth/registered';
 import { jsonError } from '@/server/http';
+import { requireRegisteredUser } from '@/server/auth/registered';
 
 export async function GET(request: Request) {
   try {
+    await requireRegisteredUser(request);
     const session = await ensureAnonymousSession(request);
     const url = new URL(request.url);
     const boardSlug = url.searchParams.get('board') ?? undefined;
@@ -22,6 +24,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    await requireRegisteredUser(request);
     const session = await ensureAnonymousSession(request);
     const input = createPostSchema.parse(await request.json());
     const regId = input.identity === 'registered' ? await registeredAnonId(request) : undefined;

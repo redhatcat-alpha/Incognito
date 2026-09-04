@@ -17,7 +17,7 @@ const safeErrors: Record<string, { status: number; message: string }> = {
   INVALID_QUERY: { status: 400, message: '搜索关键词无效' },
   USERNAME_TAKEN: { status: 409, message: '这个用户名已经被注册了' },
   INVALID_CREDENTIALS: { status: 401, message: '用户名或密码不正确' },
-  AUTH_REQUIRED: { status: 401, message: '请先登录后再使用固定身份发言' },
+  AUTH_REQUIRED: { status: 401, message: '请先登录后继续访问' },
   ACCOUNT_SUSPENDED: { status: 403, message: '该账号当前不可用，请联系管理员' },
 };
 

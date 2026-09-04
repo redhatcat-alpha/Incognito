@@ -5,9 +5,11 @@ import { createReplySchema } from '@/server/forum/schemas';
 import { createReply } from '@/server/forum/service';
 import { registeredAnonId } from '@/server/auth/registered';
 import { jsonError } from '@/server/http';
+import { requireRegisteredUser } from '@/server/auth/registered';
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    await requireRegisteredUser(request);
     const session = await ensureAnonymousSession(request);
     const { id } = await context.params;
     const input = createReplySchema.parse(await request.json());
