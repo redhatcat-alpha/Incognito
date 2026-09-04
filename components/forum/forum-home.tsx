@@ -44,6 +44,8 @@ export function ForumHome({ boardSlug }: { boardSlug?: string }) {
   const { me } = useRegisteredUser();
   const [state, setState] = useState<LoadState>('loading');
   const [tab, setTab] = useState('latest');
+  const [loadingMore, setLoadingMore] = useState(false);
+  const nextCursor = forum.nextCursor;
 
   const refresh = useCallback(async () => {
     setState('loading');
@@ -73,6 +75,16 @@ export function ForumHome({ boardSlug }: { boardSlug?: string }) {
   const addPost = useCallback((post: PostSummary) => {
     setForum((current) => ({ ...current, posts: [post, ...current.posts] }));
   }, []);
+
+  const loadMore = async () => {
+    if (!nextCursor) return;
+    setLoadingMore(true);
+    try {
+      const url = `/api/v1/posts?${new URLSearchParams({ ...(boardSlug ? { board: boardSlug } : {}), cursor: String(nextCursor) })}`;
+      const next = await apiJson<ForumData>(url);
+      setForum((current) => ({ ...current, posts: [...current.posts, ...next.posts], nextCursor: next.nextCursor }));
+    } finally { setLoadingMore(false); }
+  };
 
   // 注册给模型/快捷工具使用的“发帖”能力（与页面入口共享同一提交逻辑）
   useEffect(() => {
@@ -309,9 +321,9 @@ export function ForumHome({ boardSlug }: { boardSlug?: string }) {
           </TabsContent>
         </Tabs>
 
-        {state === 'ready' && forum.posts.length >= 50 ? (
-          <Button variant="ghost" className="mt-2 w-full rounded-xl py-5 text-muted-foreground">
-            已经到底了 <ChevronRight data-icon="inline-end" />
+        {state === 'ready' && forum.nextCursor ? (
+          <Button variant="ghost" className="mt-2 w-full rounded-xl py-5 text-muted-foreground" disabled={loadingMore} onClick={() => void loadMore()}>
+            {loadingMore ? '正在加载…' : '加载更多'} <ChevronRight data-icon="inline-end" />
           </Button>
         ) : null}
 

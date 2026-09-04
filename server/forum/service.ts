@@ -351,7 +351,7 @@ async function fetchPostDto(userId: string, publicId: string, regUserId?: string
   return mapPost(row, tagMap.get(row.id) ?? [], userId, regUserId, names.get(row.author_id) ?? null);
 }
 
-export async function listForum(userId?: string, boardSlug?: string, sort: 'latest' | 'hot' = 'latest', regUserId?: string) {
+export async function listForum(userId?: string, boardSlug?: string, sort: 'latest' | 'hot' = 'latest', regUserId?: string, cursor?: number) {
   await ensureSeedData();
   const db = getD1();
   const boardResult = await db
@@ -371,6 +371,10 @@ export async function listForum(userId?: string, boardSlug?: string, sort: 'late
   if (boardSlug) {
     where += ' AND b.slug = ? AND b.status != \'hidden\'';
     params.push(boardSlug);
+  }
+  if (cursor && sort === 'latest') {
+    where += ' AND p.last_replied_at < ?';
+    params.push(cursor);
   }
 
   const orderBy =
@@ -398,6 +402,7 @@ export async function listForum(userId?: string, boardSlug?: string, sort: 'late
   return {
     boards: boardResult.results.map(mapBoard),
     posts: postResult.results.map((post) => mapPost(post, tagMap.get(post.id) ?? [], userId, regUserId, null)),
+    nextCursor: postResult.results.length === 50 ? postResult.results[postResult.results.length - 1]?.last_replied_at ?? null : null,
   };
 }
 

@@ -50,7 +50,7 @@ export type ReplySummary = {
   updatedAt: number;
 };
 
-export type ForumData = { boards: BoardSummary[]; posts: PostSummary[] };
+export type ForumData = { boards: BoardSummary[]; posts: PostSummary[]; nextCursor?: number | null };
 
 export type ThreadData = {
   post: PostSummary;

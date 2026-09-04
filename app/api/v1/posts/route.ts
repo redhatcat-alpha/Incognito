@@ -12,8 +12,10 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const boardSlug = url.searchParams.get('board') ?? undefined;
     const sort = url.searchParams.get('sort') === 'hot' ? 'hot' : 'latest';
+    const cursorParam = Number(url.searchParams.get('cursor'));
+    const cursor = Number.isFinite(cursorParam) && cursorParam > 0 ? cursorParam : undefined;
     const regId = await registeredAnonId(request);
-    const data = await listForum(session.userId, boardSlug, sort, regId ?? undefined);
+    const data = await listForum(session.userId, boardSlug, sort, regId ?? undefined, cursor);
     return applySessionCookie(NextResponse.json({ data, error: null }), session);
   } catch (error) {
     return jsonError(error);
