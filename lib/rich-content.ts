@@ -27,7 +27,10 @@ export function htmlTextLength(value: string): number {
 
 export function htmlHasText(value: string): boolean {
   if (!isRichHtml(value)) return value.trim().length > 0;
-  return stripHtmlText(value).length > 0;
+  const text = stripHtmlText(value);
+  if (text.length > 0) return true;
+  // 纯贴吧表情内容也算有内容
+  return /\/emoji\/tieba\/image_emoticon\d+\.png/.test(value);
 }
 
 DOMPurify.addHook('afterSanitizeAttributes', (node) => {

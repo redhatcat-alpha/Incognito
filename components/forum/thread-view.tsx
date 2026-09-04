@@ -41,9 +41,10 @@ import {
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
+import Image from 'next/image';
 import { ContentBody } from '@/components/forum/content-body';
 import { RichEditor } from '@/components/editor/rich-editor';
-import { htmlHasText, htmlTextLength, stripHtmlText } from '@/lib/rich-content';
+import { htmlHasText, htmlTextLength, isRichHtml, stripHtmlText } from '@/lib/rich-content';
 import { ThreadAvatar } from '@/components/forum/thread-avatar';
 import { apiJson } from '@/lib/api';
 import { absoluteTime, relativeTime } from '@/lib/format';
@@ -728,17 +729,14 @@ export function ThreadView({ postId }: { postId: string }) {
             ) : null}
             <RichEditor
               key={`reply-editor-${editorNonce}-${quote ? 'sub' : 'direct'}`}
+              plain={Boolean(quote)}
               initialContent={draft}
               onChange={setDraft}
-              placeholder={
-                quote
-                  ? '回复层主：支持文字与贴吧表情包。'
-                  : '友善、具体地说点什么。不要泄露自己或他人的隐私信息。'
-              }
+              placeholder={quote ? '回复层主：仅支持文字与贴吧表情包。' : '友善、具体地说点什么。不要泄露自己或他人的隐私信息。'}
               minHeightClass="min-h-32"
             />
             <p className="mt-2 text-xs text-muted-foreground">
-              {quote ? '层内回复：支持文字、富文本与贴吧表情包' : '直接回复楼主的楼层内容：支持富文本与贴吧表情包'} · 最大 10,000 字
+              {quote ? '层内回复：仅支持文字与贴吧表情包' : '直接回复楼主的楼层内容：支持富文本与贴吧表情包'} · 最大 10,000 字
             </p>
             <div className="mt-3 flex items-center gap-3">
               <span className="ml-auto text-xs text-muted-foreground">{htmlTextLength(draft)}/10000 字</span>
@@ -888,6 +886,59 @@ function floorLabelOf(reply: ReplySummary): string {
 }
 
 /** 对层主的回复：默认一行紧凑展示“A → B 回复：…”，可展开为完整楼层 */
+function SubInlinePreview({ body }: { body: string }) {
+  const nodes = useMemo(() => {
+    if (!isRichHtml(body)) return body as string;
+    const box = document.createElement('div');
+    box.innerHTML = body;
+    const out: Array<{ t: 'text'; v: string } | { t: 'img'; src: string }> = [];
+    const MAX_CHARS = 60;
+    const stack: Node[] = [box];
+    let chars = 0;
+    while (stack.length > 0 && out.length <= 8 && chars < MAX_CHARS) {
+      const node = stack.pop();
+      if (!node) continue;
+      if (node.nodeType === Node.TEXT_NODE) {
+        const v = node.textContent ?? '';
+        const remain = MAX_CHARS - chars;
+        out.push({ t: 'text', v: v.length > remain ? `${v.slice(0, remain)}…` : v });
+        chars += v.length;
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node as Element;
+        if (el.tagName === 'IMG') {
+          const src = el.getAttribute('src') ?? '';
+          if (src.startsWith('/emoji/tieba/')) out.push({ t: 'img', src });
+          continue;
+        }
+        const children = Array.from(el.childNodes);
+        for (let i = children.length - 1; i >= 0; i -= 1) stack.push(children[i]);
+      }
+    }
+    return out;
+  }, [body]);
+
+  if (typeof nodes === 'string') return <>{nodes}</>;
+  return (
+    <>
+      {nodes.map((node, index) =>
+        node.t === 'img' ? (
+          <Image
+            key={`${node.src}-${index}`}
+            src={node.src}
+            alt="贴吧表情"
+            width={18}
+            height={18}
+            unoptimized
+            className="mx-px inline-block h-[18px] w-auto shrink-0 align-[-3px]"
+          />
+        ) : (
+          <span key={`t-${index}`}>{node.v}</span>
+        ),
+      )}
+    </>
+  );
+}
+
 function SubReplyRow({
   child,
   postStatus,
@@ -911,11 +962,6 @@ function SubReplyRow({
 }) {
   const [showDetail, setShowDetail] = useState(false);
   const recipientAlias = child.quoteReplyId ? (quotedReply?.status === 'published' ? quotedReply.alias : null) : null;
-  const bodyPreview = (() => {
-    const plain = stripHtmlText(child.body);
-    if (plain) return plain;
-    return /\/emoji\/tieba\//.test(child.body) || child.body.includes('data-tieba-emoji') ? '[贴吧表情]' : '';
-  })();
 
   if (child.status === 'deleted') {
     return (
@@ -950,8 +996,8 @@ function SubReplyRow({
           {recipientAlias === null ? (child.quoteReplyId ? '已删除楼层' : shortAlias(child.alias)) : shortAlias(recipientAlias)}
         </span>
         <span className="shrink-0 text-muted-foreground" aria-hidden="true">回复：</span>
-        <span className="min-w-0 flex-1 truncate text-[var(--ink)]" title={bodyPreview}>
-          {bodyPreview}
+        <span className="min-w-0 flex-1 truncate text-[var(--ink)]" title={stripHtmlText(child.body)}>
+          <SubInlinePreview body={child.body} />
         </span>
         <span className="shrink-0 text-[11px] text-muted-foreground" title={absoluteTime(child.createdAt)}>
           {relativeTime(child.createdAt)}
@@ -1121,6 +1167,7 @@ function Floor({
             <form onSubmit={(event) => void saveEdit(event)} className="mt-3">
               <RichEditor
                 key={`floor-edit-${reply.floorNo}-${editing}`}
+                plain={reply.floorNo === 0}
                 initialContent={editDraft}
                 onChange={setEditDraft}
                 minHeightClass="min-h-24"

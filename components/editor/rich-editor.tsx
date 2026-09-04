@@ -2,8 +2,12 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
+import Document from '@tiptap/extension-document';
+import History from '@tiptap/extension-history';
 import LinkExtension from '@tiptap/extension-link';
+import Paragraph from '@tiptap/extension-paragraph';
 import Placeholder from '@tiptap/extension-placeholder';
+import Text from '@tiptap/extension-text';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import {
@@ -33,13 +37,15 @@ type RichEditorProps = {
   onChange: (html: string) => void;
   placeholder?: string;
   minHeightClass?: string;
+  /** plain：仅文字 + 贴吧表情包（无其他富文本格式），用于层内回复。 */
+  plain?: boolean;
 };
 
 const toolButton =
   'grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-[var(--ink)]/[0.06] hover:text-foreground';
 
 /** 常规所见即所得富文本编辑器（TipTap）。输出受限 HTML。 */
-export function RichEditor({ initialContent = '', onChange, placeholder, minHeightClass }: RichEditorProps) {
+export function RichEditor({ initialContent = '', onChange, placeholder, minHeightClass, plain = false }: RichEditorProps) {
   const [emojiOpen, setEmojiOpen] = useState(false);
   const onChangeRef = useRef(onChange);
   useEffect(() => {
@@ -47,12 +53,21 @@ export function RichEditor({ initialContent = '', onChange, placeholder, minHeig
   }, [onChange]);
 
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({ heading: { levels: [2, 3] } }),
-      TiebaEmoji,
-      LinkExtension.configure({ openOnClick: false, autolink: true, HTMLAttributes: { rel: 'noreferrer noopener', target: '_blank' } }),
-      Placeholder.configure({ placeholder: placeholder ?? '开始输入…' }),
-    ],
+    extensions: plain
+      ? [
+          Document,
+          Paragraph,
+          Text,
+          History,
+          Placeholder.configure({ placeholder: placeholder ?? '开始输入…' }),
+          TiebaEmoji,
+        ]
+      : [
+          StarterKit.configure({ heading: { levels: [2, 3] } }),
+          TiebaEmoji,
+          LinkExtension.configure({ openOnClick: false, autolink: true, HTMLAttributes: { rel: 'noreferrer noopener', target: '_blank' } }),
+          Placeholder.configure({ placeholder: placeholder ?? '开始输入…' }),
+        ],
     content: isRichHtml(initialContent) ? initialContent : mdToHtmlLight(initialContent),
     editorProps: {
       attributes: { class: 'rich-body rich-editor-area outline-none' },
@@ -113,7 +128,7 @@ export function RichEditor({ initialContent = '', onChange, placeholder, minHeig
   return (
     <div className="overflow-hidden rounded-xl border border-black/15 bg-white focus-within:ring-2 focus-within:ring-[var(--signal)]">
       <div className="flex flex-wrap items-center gap-0.5 border-b border-[var(--line)] bg-[#fbfcf9] px-2 py-1.5">
-        {marks.map((item) => (
+        {!plain ? marks.map((item) => (
           <button
             key={item.key}
             type="button"
@@ -126,9 +141,11 @@ export function RichEditor({ initialContent = '', onChange, placeholder, minHeig
           >
             <item.icon className="size-4" />
           </button>
-        ))}
-        <span className="mx-1 h-5 w-px bg-[var(--line)]" aria-hidden="true" />
-        {blocks.map((item) => (
+        )) : null}
+        {!plain ? (
+          <span className="mx-1 h-5 w-px bg-[var(--line)]" aria-hidden="true" />
+        ) : null}
+        {!plain ? blocks.map((item) => (
           <button
             key={item.key}
             type="button"
@@ -141,17 +158,19 @@ export function RichEditor({ initialContent = '', onChange, placeholder, minHeig
           >
             <item.icon className="size-4" />
           </button>
-        ))}
-        <button
-          type="button"
-          aria-label="链接"
-          title="链接"
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => run(setLink)}
-          className={cn(toolButton, editor.isActive('link') && 'bg-[var(--ink)] text-white')}
-        >
-          <Link2 className="size-4" />
-        </button>
+        )) : null}
+        {!plain ? (
+          <button
+            type="button"
+            aria-label="链接"
+            title="链接"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => run(setLink)}
+            className={cn(toolButton, editor.isActive('link') && 'bg-[var(--ink)] text-white')}
+          >
+            <Link2 className="size-4" />
+          </button>
+        ) : null}
         <button
           type="button"
           aria-label="表情包"

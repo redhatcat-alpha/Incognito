@@ -80,7 +80,7 @@ db/schema.ts + drizzle/  # schema 与迁移（仅 SQLite/D1 方言）
 - 投票：一人一票靠 `votes(user_id, target_type, target_id)` 唯一约束；不能投自己；三态 none/up/down。
 - 已读进度：`browsing_history` 每用户每帖一条；合并必须 `MAX(旧,新)` 单调；锚点取 `floor-{publicId}` 元素 id。
 - 楼层号：**只**由“直接回复楼主”的层内容占用（`posts.next_floor_no`，删除不重排）；层内回复（带 `quote_reply_id`）`floor_no=0`，不推进计数、不占号（`replies` 已去掉 `(post_id,floor_no)` 唯一索引）。已读进度只按真实楼层统计。
-- 富文本边界（2026-09 起 WYSIWYG）：主帖正文、层内容与层内回复（含各自的编辑）统一使用 `components/editor/rich-editor.tsx`（TipTap：加粗/斜体/删除线/行内代码/代码块/H2/H3/引用/列表/链接/贴吧表情/撤销重做）。层内回复同样可插入贴吧表情；其单行预览 `SubReplyRow` 用 `stripHtmlText` 剥标签，纯表情内容回退显示「[贴吧表情]」，展开详情完整渲染表情图。
+- 富文本边界（2026-09 起 WYSIWYG）：主帖正文与层内容（含编辑）使用 `components/editor/rich-editor.tsx` 全功能模式；**层内回复及其编辑使用同一组件 `plain` 模式**（扩展集仅 Document/Paragraph/Text/History/Placeholder/TiebaEmoji——只允许文字与贴吧表情，粘贴的富文本格式会被 schema 丢弃）。层内回复折叠行预览 `SubReplyRow` 内的 `SubInlinePreview` 直接渲染表情小图与文字（DOM 遍历仅保留文本节点与 `/emoji/tieba/` 图）。`htmlHasText` 视纯表情为有内容。
 - 内容存储：新正文为受限 HTML（schema 原始长度上限放宽为 60k/30k）；展示统一走 `components/forum/content-body.tsx`——`lib/rich-content.ts#isRichHtml` 为真走 DOMPurify 白名单渲染（`RichHtml`，img 仅放行 `/emoji/tieba/`），否则走旧 Markdown 渲染器（历史内容兼容）。编辑旧内容时 `mdToHtmlLight` 自动转换后保存为 HTML。摘要/计数用 `stripHtmlText/htmlTextLength`。
 - 表情：注册表 `lib/tieba-emojis.ts`（id 列表须与 `public/emoji/tieba/` 文件一致）；WYSIWYG 中以 TipTap Image 节点插入，历史 Markdown 语法 `![贴吧表情 N](…)` 仍兼容；渲染只放行 `/emoji/tieba/` 前缀。
 - 举报：同一账号对同一目标仅一条（唯一约束 → `REPORT_EXISTS`），不能举报自己。
