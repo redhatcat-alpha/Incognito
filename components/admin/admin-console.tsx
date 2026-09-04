@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { BellRing, Hash, LogOut, Megaphone, Send } from 'lucide-react';
+import { BellRing, ClipboardList, Hash, LogOut, Megaphone, Send } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +21,7 @@ const levels = [
 
 type Level = (typeof levels)[number]['value'];
 type AdminMe = { username: string; role: string } | null;
+type AdminReport = { id: string; targetType: 'post' | 'reply'; targetPublicId: string; targetTitle: string; reason: string; details: string; status: string; createdAt: number };
 
 export function AdminConsole() {
   const [me, setMe] = useState<AdminMe | null>(null);
@@ -40,12 +41,15 @@ export function AdminConsole() {
   const [notice, setNotice] = useState('');
 
   const [list, setList] = useState<AdminAnnouncement[]>([]);
+  const [reports, setReports] = useState<AdminReport[]>([]);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const refreshList = useCallback(async () => {
     try {
       const data = await apiJson<AdminAnnouncement[]>('/api/v1/admin/announcements');
       setList(data);
+      const reportData = await apiJson<AdminReport[]>('/api/v1/admin/reports');
+      setReports(reportData);
     } catch {
       // 列表加载失败静默
     }
@@ -246,6 +250,20 @@ export function AdminConsole() {
               </Button>
             </div>
           </form>
+        </section>
+
+        <section className="rounded-2xl border border-black/10 bg-white p-6">
+          <h2 className="flex items-center gap-2 text-lg font-black tracking-tight"><ClipboardList className="size-5 text-[var(--signal-dark)]" /> 举报队列 <span className="text-sm font-normal text-muted-foreground">（{reports.filter((item) => item.status === 'pending').length} 待处理）</span></h2>
+          <ul className="mt-4 divide-y divide-[var(--line)]">
+            {reports.length === 0 ? <li className="py-6 text-center text-sm text-muted-foreground">暂无举报记录。</li> : null}
+            {reports.map((item) => (
+              <li key={item.id} className="py-3 text-sm">
+                <div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900">{item.reason}</span><span className="text-xs text-muted-foreground">{item.targetType === 'post' ? '帖子' : '回复'} · {absoluteTime(item.createdAt)}</span></div>
+                <p className="mt-1 font-bold">{item.targetTitle}</p>
+                {item.details ? <p className="mt-1 text-muted-foreground">{item.details}</p> : null}
+              </li>
+            ))}
+          </ul>
         </section>
 
         <section className="rounded-2xl border border-black/10 bg-white p-6">

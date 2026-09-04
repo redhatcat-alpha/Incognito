@@ -1103,6 +1103,40 @@ export async function createReport(
   return { reportId, status: 'pending', submittedAt: timestamp };
 }
 
+export type AdminReportRow = {
+  id: string;
+  targetType: 'post' | 'reply';
+  targetPublicId: string;
+  targetTitle: string;
+  reason: string;
+  details: string;
+  status: string;
+  createdAt: number;
+};
+
+export async function listReports(): Promise<AdminReportRow[]> {
+  const result = await getD1().prepare(`
+    SELECT r.id, r.target_type, r.reason, COALESCE(r.details, '') AS details, r.status, r.created_at,
+           CASE WHEN r.target_type = 'post' THEN p.public_id ELSE rp.public_id END AS target_public_id,
+           CASE WHEN r.target_type = 'post' THEN p.title ELSE substr(rp.body, 1, 80) END AS target_title
+    FROM reports r
+    LEFT JOIN posts p ON r.target_type = 'post' AND r.target_id = p.id
+    LEFT JOIN replies rp ON r.target_type = 'reply' AND r.target_id = rp.id
+    ORDER BY CASE WHEN r.status = 'pending' THEN 0 ELSE 1 END, r.created_at DESC
+    LIMIT 200
+  `).all<{ id: string; target_type: string; target_public_id: string | null; target_title: string | null; reason: string; details: string; status: string; created_at: number }>();
+  return result.results.filter((row) => row.target_public_id).map((row) => ({
+    id: row.id,
+    targetType: row.target_type as 'post' | 'reply',
+    targetPublicId: row.target_public_id as string,
+    targetTitle: row.target_title ?? '已删除内容',
+    reason: row.reason,
+    details: row.details,
+    status: row.status,
+    createdAt: row.created_at,
+  }));
+}
+
 export async function getAnonProfile(userId: string): Promise<AnonProfile> {
   const db = getD1();
   const user = await db
