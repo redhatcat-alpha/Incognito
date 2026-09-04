@@ -151,6 +151,11 @@ export function AdminConsole() {
     finally { setSavingSettings(false); }
   }
 
+  async function reviewReport(id: string, status: 'resolved' | 'rejected', hideTarget: boolean) {
+    try { await apiJson(`/api/v1/admin/reports/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ status, hideTarget }) }); flash(status === 'resolved' ? '举报已处理' : '举报已驳回'); void refreshList(); }
+    catch (cause) { flash(cause instanceof Error ? cause.message : '处理失败'); }
+  }
+
   if (checking) {
     return (
       <div className="grid min-h-screen place-items-center bg-[#f4f7f2] text-sm font-bold text-muted-foreground">
@@ -284,6 +289,7 @@ export function AdminConsole() {
                 <div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900">{item.reason}</span><span className="text-xs text-muted-foreground">{item.targetType === 'post' ? '帖子' : '回复'} · {absoluteTime(item.createdAt)}</span></div>
                 <p className="mt-1 font-bold">{item.targetTitle}</p>
                 {item.details ? <p className="mt-1 text-muted-foreground">{item.details}</p> : null}
+                {item.status === 'pending' ? <div className="mt-2 flex gap-2"><Button size="sm" className="h-8 rounded-full" onClick={() => void reviewReport(item.id, 'resolved', true)}>处理并隐藏</Button><Button size="sm" variant="outline" className="h-8 rounded-full bg-white" onClick={() => void reviewReport(item.id, 'rejected', false)}>驳回</Button></div> : <span className="mt-1 inline-block text-xs text-muted-foreground">状态：{item.status === 'resolved' ? '已处理' : '已驳回'}</span>}
               </li>
             ))}
           </ul>

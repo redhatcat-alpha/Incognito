@@ -47,6 +47,11 @@ export const reportSchema = z.object({
   details: z.string().trim().max(500).optional().default(''),
 });
 
+export const reportReviewSchema = z.object({
+  status: z.enum(['resolved', 'rejected']),
+  hideTarget: z.boolean().default(false),
+});
+
 export const sessionPatchSchema = z.object({
   historySyncEnabled: z.boolean(),
 });

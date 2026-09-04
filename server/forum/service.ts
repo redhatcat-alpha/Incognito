@@ -1154,6 +1154,17 @@ export async function listReports(): Promise<AdminReportRow[]> {
   }));
 }
 
+export async function reviewReport(reportId: string, status: 'resolved' | 'rejected', hideTarget: boolean) {
+  const db = getD1();
+  const report = await db.prepare('SELECT target_type, target_id FROM reports WHERE id = ? LIMIT 1').bind(reportId).first<{ target_type: string; target_id: string }>();
+  if (!report) throw new Error('POST_NOT_FOUND');
+  const table = report.target_type === 'post' ? 'posts' : 'replies';
+  const statements: D1PreparedStatement[] = [db.prepare('UPDATE reports SET status = ? WHERE id = ?').bind(status, reportId)];
+  if (hideTarget) statements.push(db.prepare(`UPDATE ${table} SET status = 'hidden', updated_at = ? WHERE id = ?`).bind(Date.now(), report.target_id));
+  await db.batch(statements);
+  return { reviewed: true, status, hidden: hideTarget };
+}
+
 export async function getAnonProfile(userId: string): Promise<AnonProfile> {
   const db = getD1();
   const user = await db
