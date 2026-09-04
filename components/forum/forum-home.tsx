@@ -1,3 +1,4 @@
+console.error('FH-MODULE-LOAD');
 'use client';
 
 import Link from 'next/link';
@@ -9,7 +10,10 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ForumShell } from '@/components/forum/forum-shell';
-import { NewPostDialog, createPostRequest } from '@/components/forum/new-post-dialog';
+import dynamic from 'next/dynamic';
+import { createPostRequest } from '@/lib/forum-create';
+
+const NewPostDialog = dynamic(() => import('@/components/forum/new-post-dialog'), { ssr: false });
 import { PostList } from '@/components/forum/post-list';
 import { apiJson } from '@/lib/api';
 import { useRegisteredUser } from '@/lib/use-registered-user';
@@ -36,6 +40,8 @@ function PostRowSkeleton() {
 }
 
 export function ForumHome({ boardSlug }: { boardSlug?: string }) {
+  console.error('FH-RENDER-START');
+  console.error('FH-BEFORE-HOOKS');
   const [forum, setForum] = useState<ForumData>({ boards: [], posts: [] });
   const [historyData, setHistoryData] = useState<HistoryData>({ enabled: true, entries: [] });
   const { me } = useRegisteredUser();
@@ -125,6 +131,7 @@ export function ForumHome({ boardSlug }: { boardSlug?: string }) {
   const continueEntry = historyData.entries[0];
 
   const trendingTags = useMemo(() => Array.from(new Set(forum.posts.flatMap((post) => post.tags))).slice(0, 5), [forum.posts]);
+  console.error('FH-AFTER-DERIVED');
 
   return (
     <ForumShell

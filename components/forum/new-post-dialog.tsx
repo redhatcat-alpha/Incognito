@@ -14,28 +14,13 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { apiJson } from '@/lib/api';
 import type { BoardSummary, PostSummary, AuthMe } from '@/lib/forum-types';
+import { createPostRequest } from '@/lib/forum-create';
 import { IdentityPicker, type Identity } from '@/components/forum/identity-picker';
 import { RichEditor } from '@/components/editor/rich-editor';
 import { htmlHasText, htmlTextLength } from '@/lib/rich-content';
 
-export async function createPostRequest(input: {
-  boardSlug: string;
-  title: string;
-  body: string;
-  tags: string[];
-  identity?: Identity;
-}): Promise<PostSummary> {
-  const data = await apiJson<PostSummary>('/api/v1/posts', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ ...input, identity: input.identity ?? 'anonymous' }),
-  });
-  return data;
-}
-
-export function NewPostDialog({
+export default function NewPostDialog({
   boards,
   onCreated,
   me = null,
