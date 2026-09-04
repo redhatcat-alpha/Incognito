@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 
 const safeErrors: Record<string, { status: number; message: string }> = {
+  RATE_LIMITED: { status: 429, message: '操作太频繁，请稍后再试' },
   BOARD_SLUG_EXISTS: { status: 409, message: '板块 slug 已存在' },
   BOARD_NOT_FOUND: { status: 404, message: '板块不存在或暂不可用' },
   POST_NOT_FOUND: { status: 404, message: '帖子不存在' },

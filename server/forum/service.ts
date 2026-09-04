@@ -580,6 +580,8 @@ export async function createPost(
   await ensureSeedData();
   const db = getD1();
   const authorId = await resolveWriter(db, identity, userId, regUserId);
+  const recent = await db.prepare("SELECT COUNT(*) AS total FROM posts WHERE author_id = ? AND created_at > ? AND status != 'deleted'").bind(authorId, Date.now() - 60_000).first<{ total: number }>();
+  if (Number(recent?.total ?? 0) >= 5) throw new Error('RATE_LIMITED');
   const board = await db
     .prepare("SELECT id, status FROM boards WHERE slug = ? AND status != 'hidden' LIMIT 1")
     .bind(input.boardSlug)
@@ -619,6 +621,8 @@ export async function createReply(
   await ensureSeedData();
   const db = getD1();
   const authorId = await resolveWriter(db, identity, userId, regUserId);
+  const recent = await db.prepare("SELECT COUNT(*) AS total FROM replies WHERE author_id = ? AND created_at > ? AND status != 'deleted'").bind(authorId, Date.now() - 60_000).first<{ total: number }>();
+  if (Number(recent?.total ?? 0) >= 20) throw new Error('RATE_LIMITED');
   const post = await db
     .prepare(
       `SELECT p.id, p.status, b.status AS board_status
