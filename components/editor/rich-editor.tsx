@@ -1,156 +1,195 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
-import { Bold, Code, Eye, Italic, Link2, PenLine, Quote, Smile } from 'lucide-react';
+import ImageExtension from '@tiptap/extension-image';
+import LinkExtension from '@tiptap/extension-link';
+import Placeholder from '@tiptap/extension-placeholder';
+import { EditorContent, useEditor } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import {
+  Bold,
+  Code,
+  CodeXml,
+  Heading2,
+  Heading3,
+  Italic,
+  Link2,
+  List,
+  ListOrdered,
+  Quote,
+  Redo2,
+  Smile,
+  Strikethrough,
+  Undo2,
+} from 'lucide-react';
 
-import { Markdown } from '@/components/forum/markdown';
+import { isRichHtml, mdToHtmlLight } from '@/lib/rich-content';
+import { tiebaEmojis } from '@/lib/tieba-emojis';
 import { cn } from '@/lib/utils';
-import { emojiToken, tiebaEmojis } from '@/lib/tieba-emojis';
 
 type RichEditorProps = {
-  id: string;
-  value: string;
-  onChange: (value: string) => void;
+  initialContent?: string;
+  onChange: (html: string) => void;
   placeholder?: string;
-  maxLength?: number;
   minHeightClass?: string;
 };
 
-function textareaOf(id: string): HTMLTextAreaElement | null {
-  return document.getElementById(id) as HTMLTextAreaElement | null;
-}
+const toolButton =
+  'grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-[var(--ink)]/[0.06] hover:text-foreground';
 
-/**
- * 受限富文本编辑器：工具栏插入受限 Markdown 标记（加粗/斜体/行内代码/代码块/
- * 引用/链接），支持实时预览；输出与帖子渲染层共用同一套白名单语法。
- */
-export function RichEditor({ id, value, onChange, placeholder, maxLength, minHeightClass }: RichEditorProps) {
-  const [mode, setMode] = useState<'write' | 'preview'>('write');
+/** 常规所见即所得富文本编辑器（TipTap）。输出受限 HTML。 */
+export function RichEditor({ initialContent = '', onChange, placeholder, minHeightClass }: RichEditorProps) {
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
-  function apply(next: string, start: number, end: number) {
-    onChange(next);
-    window.requestAnimationFrame(() => {
-      const el = textareaOf(id);
-      if (!el) return;
-      el.focus();
-      el.setSelectionRange(start, end);
-    });
-  }
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({ heading: { levels: [2, 3] } }),
+      ImageExtension.configure({ allowBase64: false, HTMLAttributes: { loading: 'lazy' } }),
+      LinkExtension.configure({ openOnClick: false, autolink: true, HTMLAttributes: { rel: 'noreferrer noopener', target: '_blank' } }),
+      Placeholder.configure({ placeholder: placeholder ?? '开始输入…' }),
+    ],
+    content: isRichHtml(initialContent) ? initialContent : mdToHtmlLight(initialContent),
+    editorProps: {
+      attributes: { class: 'rich-body rich-editor-area outline-none' },
+    },
+    onUpdate: ({ editor: instance }) => {
+      onChangeRef.current(instance.getHTML());
+    },
+  });
 
-  function wrapInline(open: string, close: string, sample: string) {
-    const el = textareaOf(id);
-    if (!el) return;
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    const selected = value.slice(start, end) || sample;
-    apply(value.slice(0, start) + open + selected + close + value.slice(end), start + open.length, start + open.length + selected.length);
-  }
+  if (!editor) return null;
 
-  function wrapBlock(prefix: string) {
-    const el = textareaOf(id);
-    if (!el) return;
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    const selected = value.slice(start, end);
-    if (!selected) {
-      onChange(`${value.slice(0, start)}${prefix}${value.slice(start)}`);
-      window.requestAnimationFrame(() => {
-        const target = textareaOf(id);
-        if (!target) return;
-        target.focus();
-        target.setSelectionRange(start + prefix.length, start + prefix.length);
-      });
+  const run = (fn: () => void) => {
+    fn();
+    setEmojiOpen(false);
+  };
+
+  const insertEmoji = (emojiId: number) => {
+    const src = `/emoji/tieba/image_emoticon${emojiId}.png`;
+    editor
+      .chain()
+      .focus()
+      .insertContent({
+        type: 'image',
+        attrs: { src, alt: `贴吧表情 ${emojiId}`, title: `贴吧表情 ${emojiId}`, width: 22, height: 22 },
+      })
+      .run();
+    setEmojiOpen(false);
+  };
+
+  const setLink = () => {
+    const previous = editor.getAttributes('link').href as string | undefined;
+    const url = window.prompt('链接地址（以 http:// 或 https:// 开头）：', previous ?? '');
+    if (url === null) return;
+    if (!url.trim()) {
+      editor.chain().focus().extendMarkRange('link').unsetLink().run();
       return;
     }
-    const prefixed = selected
-      .split('\n')
-      .map((line) => `${prefix}${line}`)
-      .join('\n');
-    apply(value.slice(0, start) + prefixed + value.slice(end), start, start + prefixed.length);
-  }
+    if (!/^https?:\/\//i.test(url.trim())) return;
+    editor.chain().focus().extendMarkRange('link').setLink({ href: url.trim() }).run();
+  };
 
-  function insertEmoji(emojiId: number) {
-    const el = textareaOf(id);
-    if (!el) return;
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    const token = emojiToken(emojiId);
-    apply(value.slice(0, start) + token + value.slice(end), start + token.length, start + token.length);
-    setEmojiOpen(false);
-  }
+  const marks = [
+    { key: 'bold', label: '加粗', icon: Bold, active: editor.isActive('bold'), action: () => run(() => editor.chain().focus().toggleBold().run()) },
+    { key: 'italic', label: '斜体', icon: Italic, active: editor.isActive('italic'), action: () => run(() => editor.chain().focus().toggleItalic().run()) },
+    { key: 'strike', label: '删除线', icon: Strikethrough, active: editor.isActive('strike'), action: () => run(() => editor.chain().focus().toggleStrike().run()) },
+    { key: 'code', label: '行内代码', icon: Code, active: editor.isActive('code'), action: () => run(() => editor.chain().focus().toggleCode().run()) },
+    { key: 'codeblock', label: '代码块', icon: CodeXml, active: editor.isActive('codeBlock'), action: () => run(() => editor.chain().focus().toggleCodeBlock().run()) },
+  ];
 
-  function wrapLink() {
-    const url = window.prompt('链接地址（以 http:// 或 https:// 开头）：');
-    if (!url || !/^https?:\/\//i.test(url.trim())) return;
-    wrapInline('[', `](${url.trim()})`, '链接文字');
-  }
-
-  const buttons = [
-    { key: 'bold', label: '加粗', title: '加粗（**文本**）', icon: Bold, call: () => wrapInline('**', '**', '加粗文字') },
-    { key: 'italic', label: '斜体', title: '斜体（*文本*）', icon: Italic, call: () => wrapInline('*', '*', '斜体文字') },
-    { key: 'code', label: '行内代码', title: '行内代码（`代码`）', icon: Code, call: () => wrapInline('`', '`', '代码') },
-    { key: 'fence', label: '代码块', title: '代码块（``` 围栏）', icon: PenLine, call: () => wrapInline('```\n', '\n```', '代码块') },
-    { key: 'quote', label: '引用', title: '引用块（> 前缀）', icon: Quote, call: () => wrapBlock('> ') },
-    { key: 'link', label: '链接', title: '链接（[文字](https://…)）', icon: Link2, call: () => wrapLink() },
+  const blocks = [
+    { key: 'h2', label: '标题 2', icon: Heading2, active: editor.isActive('heading', { level: 2 }), action: () => run(() => editor.chain().focus().toggleHeading({ level: 2 }).run()) },
+    { key: 'h3', label: '标题 3', icon: Heading3, active: editor.isActive('heading', { level: 3 }), action: () => run(() => editor.chain().focus().toggleHeading({ level: 3 }).run()) },
+    { key: 'quote', label: '引用', icon: Quote, active: editor.isActive('blockquote'), action: () => run(() => editor.chain().focus().toggleBlockquote().run()) },
+    { key: 'ul', label: '无序列表', icon: List, active: editor.isActive('bulletList'), action: () => run(() => editor.chain().focus().toggleBulletList().run()) },
+    { key: 'ol', label: '有序列表', icon: ListOrdered, active: editor.isActive('orderedList'), action: () => run(() => editor.chain().focus().toggleOrderedList().run()) },
   ];
 
   return (
-    <div className="rounded-xl border border-black/15 bg-white focus-within:ring-2 focus-within:ring-[var(--signal)]">
+    <div className="overflow-hidden rounded-xl border border-black/15 bg-white focus-within:ring-2 focus-within:ring-[var(--signal)]">
       <div className="flex flex-wrap items-center gap-0.5 border-b border-[var(--line)] bg-[#fbfcf9] px-2 py-1.5">
-        {mode === 'write'
-          ? buttons.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                title={item.title}
-                aria-label={item.label}
-                onClick={() => item.call()}
-                className="grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-[var(--ink)]/[0.06] hover:text-foreground"
-              >
-                <item.icon className="size-4" />
-              </button>
-            ))
-          : null}
+        {marks.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            aria-label={item.label}
+            aria-pressed={item.active}
+            title={item.label}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={item.action}
+            className={cn(toolButton, item.active && 'bg-[var(--ink)] text-white')}
+          >
+            <item.icon className="size-4" />
+          </button>
+        ))}
+        <span className="mx-1 h-5 w-px bg-[var(--line)]" aria-hidden="true" />
+        {blocks.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            aria-label={item.label}
+            aria-pressed={item.active}
+            title={item.label}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={item.action}
+            className={cn(toolButton, item.active && 'bg-[var(--ink)] text-white')}
+          >
+            <item.icon className="size-4" />
+          </button>
+        ))}
+        <button
+          type="button"
+          aria-label="链接"
+          title="链接"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => run(setLink)}
+          className={cn(toolButton, editor.isActive('link') && 'bg-[var(--ink)] text-white')}
+        >
+          <Link2 className="size-4" />
+        </button>
         <button
           type="button"
           aria-label="表情包"
           aria-expanded={emojiOpen}
-          onClick={() => { if (mode === 'preview') setMode('write'); setEmojiOpen((v) => !v); }}
-          className={cn(
-            'grid size-8 place-items-center rounded-lg transition-colors',
-            emojiOpen ? 'bg-[var(--ink)] text-white' : 'text-muted-foreground hover:bg-[var(--ink)]/[0.06] hover:text-foreground',
-          )}
+          title="贴吧表情包"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => setEmojiOpen((value) => !value)}
+          className={cn(toolButton, emojiOpen && 'bg-[var(--ink)] text-white')}
         >
           <Smile className="size-4" />
         </button>
         <div className="ml-auto flex items-center gap-0.5">
           <button
             type="button"
-            aria-pressed={mode === 'write'}
-            onClick={() => setMode('write')}
-            className={cn(
-              'inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors',
-              mode === 'write' ? 'bg-[var(--ink)] text-white' : 'text-muted-foreground hover:bg-[var(--ink)]/[0.06]',
-            )}
+            aria-label="撤销"
+            title="撤销"
+            onMouseDown={(event) => event.preventDefault()}
+            disabled={!editor.can().undo()}
+            onClick={() => run(() => editor.chain().focus().undo().run())}
+            className={cn(toolButton, 'disabled:opacity-35')}
           >
-            <PenLine className="size-3.5" />编辑
+            <Undo2 className="size-4" />
           </button>
           <button
             type="button"
-            aria-pressed={mode === 'preview'}
-            onClick={() => setMode('preview')}
-            className={cn(
-              'inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors',
-              mode === 'preview' ? 'bg-[var(--ink)] text-white' : 'text-muted-foreground hover:bg-[var(--ink)]/[0.06]',
-            )}
+            aria-label="重做"
+            title="重做"
+            onMouseDown={(event) => event.preventDefault()}
+            disabled={!editor.can().redo()}
+            onClick={() => run(() => editor.chain().focus().redo().run())}
+            className={cn(toolButton, 'disabled:opacity-35')}
           >
-            <Eye className="size-3.5" />预览
+            <Redo2 className="size-4" />
           </button>
         </div>
       </div>
-      {mode === 'write' && emojiOpen ? (
+
+      {emojiOpen ? (
         <div className="grid max-h-56 grid-cols-8 gap-1 overflow-y-auto border-b border-[var(--line)] bg-[#fbfcf9] p-2">
           {tiebaEmojis.map((item) => (
             <button
@@ -164,24 +203,8 @@ export function RichEditor({ id, value, onChange, placeholder, maxLength, minHei
           ))}
         </div>
       ) : null}
-      {mode === 'write' ? (
-        <textarea
-          id={id}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder={placeholder}
-          maxLength={maxLength}
-          className={cn('block w-full resize-y bg-transparent px-3.5 py-3 text-[0.95rem] leading-6 outline-none placeholder:text-muted-foreground/70', minHeightClass ?? 'min-h-36')}
-        />
-      ) : (
-        <div className={cn('px-4 py-3 text-[0.95rem]', minHeightClass ?? 'min-h-36')}>
-          {value.trim() ? (
-            <Markdown text={value} />
-          ) : (
-            <p className="text-sm text-muted-foreground/70">还没有内容，切回「编辑」开始输入。</p>
-          )}
-        </div>
-      )}
+
+      <EditorContent editor={editor} className={cn('rich-editor-shell', minHeightClass ?? 'min-h-40')} />
     </div>
   );
 }

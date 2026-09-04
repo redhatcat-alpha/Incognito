@@ -169,3 +169,56 @@ select {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* 富文本正文/编辑器公共排版 */
+.rich-body {
+  line-height: 1.75;
+  word-break: break-word;
+}
+.rich-body p { margin: 0.5rem 0; }
+.rich-body h2 { margin: 1rem 0 0.5rem; font-size: 1.25rem; font-weight: 900; letter-spacing: -0.02em; }
+.rich-body h3 { margin: 0.9rem 0 0.45rem; font-size: 1.1rem; font-weight: 800; }
+.rich-body ul { list-style: disc; padding-left: 1.4rem; margin: 0.5rem 0; }
+.rich-body ol { list-style: decimal; padding-left: 1.4rem; margin: 0.5rem 0; }
+.rich-body li { margin: 0.2rem 0; }
+.rich-body a { font-weight: 600; color: var(--signal-dark); text-decoration: underline; text-underline-offset: 2px; }
+.rich-body blockquote {
+  margin: 0.6rem 0;
+  border-left: 3px solid var(--signal-dark);
+  padding-left: 0.9rem;
+  color: var(--muted-foreground);
+}
+.rich-body code {
+  border-radius: 0.4rem;
+  background: rgb(17 24 21 / 0.06);
+  padding: 0.1rem 0.35rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.88em;
+}
+.rich-body pre {
+  margin: 0.7rem 0;
+  overflow-x: auto;
+  border-radius: 0.8rem;
+  background: var(--ink);
+  padding: 0.9rem 1rem;
+  color: #fff;
+}
+.rich-body pre code { background: transparent; color: inherit; padding: 0; }
+.rich-body img {
+  display: inline-block;
+  height: 22px;
+  width: auto;
+  border-radius: 0.2rem;
+  vertical-align: -4px;
+  margin: 0 0.1rem;
+}
+.rich-body .rich-editor-area { min-height: inherit; }
+.rich-editor-shell .ProseMirror { padding: 0.7rem 0.9rem; outline: none; }
+.rich-editor-shell .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--muted-foreground);
+  opacity: 0.7;
+  pointer-events: none;
+  float: left;
+  height: 0;
+}

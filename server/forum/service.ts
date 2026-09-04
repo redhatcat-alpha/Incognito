@@ -159,6 +159,19 @@ export type AnonProfile = {
 /** 注册用户公开信息；author 行与其 registered_users.id 共用同一 ID。 */
 export type RegisteredAuthor = { username: string; uid: number };
 
+function plainTextOf(value: string): string {
+  return value
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function isMine(authorId: string, anonUserId?: string, regUserId?: string): boolean {
   return authorId === anonUserId || (regUserId !== undefined && authorId === regUserId);
 }
@@ -270,7 +283,7 @@ function mapPost(
     },
     title: row.title,
     body: row.body,
-    excerpt: row.body.replaceAll('\n', ' ').slice(0, 140),
+    excerpt: plainTextOf(row.body).slice(0, 140),
     tags,
     score: row.up_count - row.down_count,
     upCount: row.up_count,

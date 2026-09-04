@@ -10,25 +10,25 @@ const identitySchema = z.enum(['anonymous', 'registered']).default('anonymous');
 export const createPostSchema = z.object({
   boardSlug: z.enum(['tucao', 'tech', 'trending']),
   title: z.string().trim().min(4, '标题至少需要 4 个字').max(120),
-  body: z.string().trim().min(1, '正文不能为空').max(20_000),
+  body: z.string().trim().min(1, '正文不能为空').max(60_000),
   tags: z.array(tagNameSchema).max(5).default([]),
   identity: identitySchema,
 });
 
 export const editPostSchema = z.object({
   title: z.string().trim().min(4, '标题至少需要 4 个字').max(120),
-  body: z.string().trim().min(1, '正文不能为空').max(20_000),
+  body: z.string().trim().min(1, '正文不能为空').max(60_000),
   tags: z.array(tagNameSchema).max(5).default([]),
 });
 
 export const createReplySchema = z.object({
-  body: z.string().trim().min(1, '回复不能为空').max(10_000),
+  body: z.string().trim().min(1, '回复不能为空').max(30_000),
   quoteReplyId: z.string().trim().max(80).nullable().optional(),
   identity: identitySchema,
 });
 
 export const editReplySchema = z.object({
-  body: z.string().trim().min(1, '回复不能为空').max(10_000),
+  body: z.string().trim().min(1, '回复不能为空').max(30_000),
 });
 
 export const voteSchema = z.object({

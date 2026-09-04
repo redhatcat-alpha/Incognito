@@ -18,6 +18,7 @@ import { apiJson } from '@/lib/api';
 import type { BoardSummary, PostSummary, AuthMe } from '@/lib/forum-types';
 import { IdentityPicker, type Identity } from '@/components/forum/identity-picker';
 import { RichEditor } from '@/components/editor/rich-editor';
+import { htmlHasText, htmlTextLength } from '@/lib/rich-content';
 
 export async function createPostRequest(input: {
   boardSlug: string;
@@ -129,16 +130,18 @@ export function NewPostDialog({
                 required
               />
             </label>
-            <label htmlFor="new-post-body" className="grid gap-1.5 text-sm font-semibold">
-              正文 <span className="font-normal text-muted-foreground">支持富文本（加粗、代码、引用等）</span>
+            <div className="grid gap-1.5 text-sm font-semibold">
+              <p>
+                正文 <span className="font-normal text-muted-foreground">支持富文本（加粗、标题、列表、表情等）</span>
+              </p>
               <RichEditor
-                id="new-post-body"
-                value={body}
+                key={`new-post-${open}`}
+                initialContent={body}
                 onChange={setBody}
                 placeholder="请避免泄露自己或他人的身份信息……"
-                maxLength={20000}
               />
-            </label>
+              <p className="text-right text-xs font-normal text-muted-foreground">{htmlTextLength(body)} 字</p>
+            </div>
             <label htmlFor="new-post-tags" className="grid gap-1.5 text-sm font-semibold">
               标签{' '}
               <span className="font-normal text-muted-foreground">用逗号分隔，最多 5 个</span>
@@ -161,7 +164,7 @@ export function NewPostDialog({
             ) : null}
           </div>
           <DialogFooter className="-mx-6 -mb-6 px-6">
-            <Button type="submit" disabled={saving || title.trim().length < 4 || !body.trim()} className="rounded-full px-5">
+            <Button type="submit" disabled={saving || title.trim().length < 4 || !htmlHasText(body)} className="rounded-full px-5">
               {saving ? '正在发布…' : '匿名发布'}
             </Button>
           </DialogFooter>
