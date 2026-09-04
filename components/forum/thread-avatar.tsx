@@ -21,6 +21,9 @@ const palettes = [
 
 /** 由种子派生的确定性图案头像，同一帖子内同一账号保持不变。 */
 export function ThreadAvatar({ seed, label, className }: { seed: string; label?: string; className?: string }) {
+  if (seed.startsWith('/api/v1/media/')) {
+    return <span aria-hidden="true" className={cn('relative inline-block shrink-0 overflow-hidden rounded-full', className)}>{/* oxlint-disable-next-line next/no-img-element */}<img src={seed} alt="" className="h-full w-full object-cover" /></span>;
+  }
   const hash = hashText(seed || 'anonymous');
   const [dark, light] = palettes[hash % palettes.length];
   const rotate = hash % 360;

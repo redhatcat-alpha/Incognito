@@ -46,6 +46,7 @@ export function SettingsProfileView() {
   const [sessions, setSessions] = useState<AnonSessionInfo[]>([]);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const load = useCallback(async () => {
     setError('');
@@ -160,6 +161,14 @@ export function SettingsProfileView() {
                   </button>
                 ))}
               </div>
+              <label className="mt-3 inline-flex cursor-pointer items-center rounded-full border border-black/15 bg-white px-3 py-2 text-xs font-bold hover:bg-black/[0.03]">
+                {uploadingAvatar ? '上传中…' : '上传图片头像'}
+                <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" disabled={uploadingAvatar} onChange={async (event) => {
+                  const file = event.target.files?.[0]; if (!file) return; setUploadingAvatar(true); setError('');
+                  try { const form = new FormData(); form.append('file', file); const response = await fetch('/api/v1/media', { method: 'POST', body: form, credentials: 'same-origin' }); const payload = await response.json() as { data?: { url?: string }; error?: { message?: string } }; const url = payload.data?.url; if (!response.ok || !url) throw new Error(payload.error?.message ?? '上传失败'); await apiJson('/api/v1/anon/session', { method: 'PATCH', body: JSON.stringify({ avatarSeed: url }) }); setProfile((current) => current ? { ...current, avatarSeed: url } : current); }
+                  catch (cause) { setError(cause instanceof Error ? cause.message : '头像上传失败'); } finally { setUploadingAvatar(false); event.target.value = ''; }
+                }} />
+              </label>
             </div>
             <div className="mt-5 rounded-xl bg-[#f8faf6] p-4 text-sm leading-6 text-muted-foreground">
               <p className="flex items-start gap-2">

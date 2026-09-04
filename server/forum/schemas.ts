@@ -57,7 +57,7 @@ export const sessionPatchSchema = z.object({
 });
 
 export const avatarPatchSchema = z.object({
-  avatarSeed: z.string().trim().min(1).max(40).regex(/^[a-z0-9-]+$/),
+  avatarSeed: z.string().trim().min(1).max(120).regex(/^(?:[a-z0-9-]+|\/api\/v1\/media\/[0-9a-f-]{36})$/),
 });
 
 const usernameSchema = z
