@@ -365,10 +365,51 @@ export function ThreadView({ postId }: { postId: string }) {
   }, [thread, readFloor]);
 
   const quoteMap = useMemo(() => new Map(thread?.replies.map((reply) => [reply.id, reply]) ?? []), [thread]);
+
+  // 分层会话模型：直接回复楼主(无引用)的楼层为顶层，其余回复按引用链归入对应顶层楼层
+  const layers = useMemo(() => {
+    if (!thread) return [];
+    const byId = new Map(thread.replies.map((reply) => [reply.id, reply]));
+    const isDirect = (reply: ReplySummary) => !reply.quoteReplyId;
+    const roots = thread.replies.filter(isDirect);
+    const childrenOf = new Map<string, ReplySummary[]>();
+    const orphan: ReplySummary[] = [];
+    for (const reply of thread.replies) {
+      if (isDirect(reply)) continue;
+      let parent = reply.quoteReplyId ? byId.get(reply.quoteReplyId) : undefined;
+      let hops = 0;
+      while (parent && !isDirect(parent) && hops < 12) {
+        parent = parent.quoteReplyId ? byId.get(parent.quoteReplyId) : undefined;
+        hops += 1;
+      }
+      const anchor = parent && isDirect(parent) ? parent : [...roots].reverse().find((root) => root.floorNo < reply.floorNo);
+      if (!anchor) {
+        orphan.push(reply);
+        continue;
+      }
+      const list = childrenOf.get(anchor.id) ?? [];
+      list.push(reply);
+      childrenOf.set(anchor.id, list);
+    }
+    for (const list of childrenOf.values()) list.sort((a, b) => a.floorNo - b.floorNo);
+    const sections = roots.map((root) => ({ root, children: childrenOf.get(root.id) ?? [] }));
+    for (const reply of orphan) sections.push({ root: reply, children: [] });
+    sections.sort((a, b) => a.root.floorNo - b.root.floorNo);
+    return sections;
+  }, [thread]);
   const post = thread?.post;
   const mine = post?.isMine;
   const now = useNow();
   const canEdit = Boolean(mine && post && post.status === 'published' && now !== null && now - post.createdAt <= EDIT_WINDOW_MS);
+
+  const quoteThis = useCallback(
+    (reply: ReplySummary) => {
+      setQuote({ replyId: reply.id, floorNo: reply.floorNo, alias: reply.alias });
+      draftRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      window.setTimeout(() => draftRef.current?.focus(), 300);
+    },
+    [],
+  );
 
   async function submitReply(event: { preventDefault: () => void }) {
     event.preventDefault();
@@ -623,26 +664,21 @@ export function ThreadView({ postId }: { postId: string }) {
             <p className="mt-1 text-sm text-muted-foreground">来抢 2 楼，成为第一个回应楼主的人</p>
           </div>
         ) : (
-          <ol className="space-y-4">
-            {thread.replies.map((reply) => (
-              <li key={reply.id}>
-                <Floor
-                  reply={reply}
-                  postStatus={post.status}
-                  quotedReply={reply.quoteReplyId ? quoteMap.get(reply.quoteReplyId) : undefined}
-                  onQuote={() => {
-                    setQuote({ replyId: reply.id, floorNo: reply.floorNo, alias: reply.alias });
-                    draftRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    window.setTimeout(() => draftRef.current?.focus(), 300);
-                  }}
-                  onVote={(value) => toggleVote('reply', reply.id, value)}
-                  onChanged={() => { void load(); }}
-                  notify={setNotice}
-                  voteBusy={busyVotes.has(`reply:${reply.id}`)}
-                />
-              </li>
+          <div className="space-y-4">
+            {layers.map((layer) => (
+              <FloorLayer
+                key={layer.root.id}
+                layer={layer}
+                postStatus={post.status}
+                quoteMap={quoteMap}
+                onQuote={quoteThis}
+                onVote={(reply, value) => toggleVote('reply', reply.id, value)}
+                onChanged={() => { void load(); }}
+                notify={setNotice}
+                busyIds={busyVotes}
+              />
             ))}
-          </ol>
+          </div>
         )}
       </div>
 
@@ -733,6 +769,91 @@ function VoteButton({
   );
 }
 
+const PREVIEW_SUB_REPLIES = 3;
+
+type FloorLayerModel = { root: ReplySummary; children: ReplySummary[] };
+
+function FloorLayer({
+  layer,
+  postStatus,
+  quoteMap,
+  onQuote,
+  onVote,
+  onChanged,
+  notify,
+  busyIds,
+}: {
+  layer: FloorLayerModel;
+  postStatus: string;
+  quoteMap: Map<string, ReplySummary>;
+  onQuote: (reply: ReplySummary) => void;
+  onVote: (reply: ReplySummary, value: -1 | 0 | 1) => void;
+  onChanged: () => void;
+  notify: (notice: GlobalNotice) => void;
+  busyIds: Set<string>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const { root, children } = layer;
+  const shown = expanded ? children : children.slice(0, PREVIEW_SUB_REPLIES);
+  const hiddenCount = children.length - shown.length;
+
+  return (
+    <Floor
+      reply={root}
+      postStatus={postStatus}
+      quotedReply={root.quoteReplyId ? quoteMap.get(root.quoteReplyId) : undefined}
+      onQuote={() => onQuote(root)}
+      onVote={(value) => onVote(root, value)}
+      onChanged={onChanged}
+      notify={notify}
+      voteBusy={busyIds.has(`reply:${root.id}`)}
+      childrenArea={
+        children.length > 0 ? (
+          <div className="mt-4 border-t border-[var(--line)] pt-3">
+            <p className="px-1 text-[11px] font-black uppercase tracking-[0.14em] text-muted-foreground">
+              回复本层 · {children.length} 条
+            </p>
+            <div className="mt-2 space-y-2.5">
+              {shown.map((child) => (
+                <Floor
+                  key={child.id}
+                  reply={child}
+                  nested
+                  postStatus={postStatus}
+                  quotedReply={child.quoteReplyId ? quoteMap.get(child.quoteReplyId) : undefined}
+                  onQuote={() => onQuote(child)}
+                  onVote={(value) => onVote(child, value)}
+                  onChanged={onChanged}
+                  notify={notify}
+                  voteBusy={busyIds.has(`reply:${child.id}`)}
+                />
+              ))}
+            </div>
+            {children.length > PREVIEW_SUB_REPLIES ? (
+              <button
+                type="button"
+                aria-expanded={expanded}
+                onClick={() => setExpanded((value) => !value)}
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-black/15 bg-[#f8faf6] px-4 py-2.5 text-sm font-bold text-muted-foreground transition-colors hover:border-black/30 hover:text-foreground"
+              >
+                {expanded ? (
+                  <>
+                    <ChevronUp className="size-4" /> 收起本层回复
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="size-4" /> 展开其余 {hiddenCount} 条回复
+                  </>
+                )}
+              </button>
+            ) : null}
+          </div>
+        ) : undefined
+      }
+    />
+  );
+}
+
 function Floor({
   reply,
   postStatus,
@@ -742,6 +863,8 @@ function Floor({
   onChanged,
   notify,
   voteBusy,
+  nested = false,
+  childrenArea,
 }: {
   reply: ReplySummary;
   postStatus: string;
@@ -751,6 +874,8 @@ function Floor({
   onChanged: () => void;
   notify: (notice: GlobalNotice) => void;
   voteBusy: boolean;
+  nested?: boolean;
+  childrenArea?: React.ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
   const [editDraft, setEditDraft] = useState(reply.body);
@@ -787,7 +912,10 @@ function Floor({
     <article
       id={`floor-${reply.id}`}
       data-floor-no={reply.floorNo}
-      className="scroll-mt-24 rounded-2xl border border-black/10 bg-white p-4 sm:p-5"
+      className={cn(
+        'scroll-mt-24 border',
+        nested ? 'rounded-xl border-[#e5ebe1] bg-[#fbfdf8] p-3.5 sm:p-4' : 'rounded-2xl border-black/10 bg-white p-4 sm:p-5',
+      )}
     >
       {reply.status === 'deleted' ? (
         <div className="flex items-center gap-3 py-1">
@@ -805,7 +933,7 @@ function Floor({
               {reply.floorNo}F
             </span>
             <div className="flex min-w-0 items-center gap-2">
-              <ThreadAvatar seed={reply.avatarSeed} label={reply.alias.replace('匿名 ', '').replace('楼主', '主')} className="size-8" />
+              <ThreadAvatar seed={reply.avatarSeed} label={reply.alias.replace('匿名 ', '').replace('楼主', '主')} className={nested ? 'size-7' : 'size-8'} />
               <span className={cn('font-black', reply.isOwner && 'text-[var(--signal-dark)]')}>{reply.alias}</span>
               {reply.isOwner ? <Badge variant="outline" className="h-5 border-[var(--signal-dark)]/40 bg-[var(--signal)]/25 px-1.5 text-[10px] font-bold">楼主</Badge> : null}
               {reply.isMine ? <Badge variant="outline" className="h-5 border-black/10 bg-white px-1.5 text-[10px] font-semibold text-muted-foreground">我</Badge> : null}
@@ -879,6 +1007,7 @@ function Floor({
           )}
         </>
       )}
+      {childrenArea ? <div className="mt-1">{childrenArea}</div> : null}
     </article>
   );
 }
