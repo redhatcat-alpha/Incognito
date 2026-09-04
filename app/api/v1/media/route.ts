@@ -3,6 +3,7 @@ import { env } from 'cloudflare:workers';
 
 import { ensureAnonymousSession } from '@/server/auth/anonymous';
 import { jsonError } from '@/server/http';
+import { stripJpegExif } from '@/lib/media';
 
 const ALLOWED = new Map([
   ['image/jpeg', 'jpg'],
@@ -27,7 +28,9 @@ export async function POST(request: Request) {
     if ((extension === 'jpg' && !isJpeg) || (extension === 'png' && !isPng) || (extension === 'webp' && !isWebp)) throw new Error('MEDIA_FILE_INVALID');
     const id = crypto.randomUUID();
     const key = `uploads/${id}.${extension}`;
-    await env.FILES.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type, cacheControl: 'public, max-age=31536000, immutable' }, customMetadata: { uploadedAt: new Date().toISOString() } });
-    return NextResponse.json({ data: { id, url: `/api/v1/media/${id}`, contentType: file.type, size: file.size }, error: null }, { status: 201 });
+    const source = new Uint8Array(await file.arrayBuffer());
+    const stored = extension === 'jpg' ? stripJpegExif(source) : source;
+    await env.FILES.put(key, stored, { httpMetadata: { contentType: file.type, cacheControl: 'public, max-age=31536000, immutable' }, customMetadata: { uploadedAt: new Date().toISOString(), exifStripped: extension === 'jpg' ? 'true' : 'not-applicable' } });
+    return NextResponse.json({ data: { id, url: `/api/v1/media/${id}`, contentType: file.type, size: stored.byteLength }, error: null }, { status: 201 });
   } catch (error) { return jsonError(error); }
 }
