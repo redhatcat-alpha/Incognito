@@ -42,6 +42,8 @@ export function AdminConsole() {
 
   const [list, setList] = useState<AdminAnnouncement[]>([]);
   const [reports, setReports] = useState<AdminReport[]>([]);
+  const [siteSettings, setSiteSettings] = useState({ name: '', shortName: '', description: '', primaryColor: '#d9ff57' });
+  const [savingSettings, setSavingSettings] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const refreshList = useCallback(async () => {
@@ -50,6 +52,8 @@ export function AdminConsole() {
       setList(data);
       const reportData = await apiJson<AdminReport[]>('/api/v1/admin/reports');
       setReports(reportData);
+      const settingsData = await apiJson<typeof siteSettings>('/api/v1/admin/site-settings');
+      setSiteSettings(settingsData);
     } catch {
       // 列表加载失败静默
     }
@@ -138,6 +142,13 @@ export function AdminConsole() {
       flash(cause instanceof Error ? cause.message : '下架失败');
     }
     setConfirmId(null);
+  }
+
+  async function saveSettings(event: { preventDefault: () => void }) {
+    event.preventDefault(); setSavingSettings(true);
+    try { const saved = await apiJson<typeof siteSettings>('/api/v1/admin/site-settings', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(siteSettings) }); setSiteSettings(saved); flash('站点设置已保存'); }
+    catch (cause) { flash(cause instanceof Error ? cause.message : '保存失败'); }
+    finally { setSavingSettings(false); }
   }
 
   if (checking) {
@@ -249,6 +260,18 @@ export function AdminConsole() {
                 <Send className="size-4" />{publishing ? '发布中…' : '发布公告'}
               </Button>
             </div>
+          </form>
+        </section>
+
+        <section className="rounded-2xl border border-black/10 bg-white p-6">
+          <h2 className="text-lg font-black tracking-tight">站点设置</h2>
+          <p className="mt-1 text-sm text-muted-foreground">修改后会应用于前台导航与站点描述。</p>
+          <form onSubmit={(event) => void saveSettings(event)} className="mt-4 grid gap-3 sm:grid-cols-2">
+            <label className="grid gap-1 text-sm font-bold">站点名称<input className="h-10 rounded-xl border border-black/15 px-3 font-normal" value={siteSettings.name} onChange={(e) => setSiteSettings({ ...siteSettings, name: e.target.value })} /></label>
+            <label className="grid gap-1 text-sm font-bold">简称<input className="h-10 rounded-xl border border-black/15 px-3 font-normal" value={siteSettings.shortName} onChange={(e) => setSiteSettings({ ...siteSettings, shortName: e.target.value })} /></label>
+            <label className="grid gap-1 text-sm font-bold sm:col-span-2">站点描述<textarea className="min-h-20 rounded-xl border border-black/15 px-3 py-2 font-normal" value={siteSettings.description} onChange={(e) => setSiteSettings({ ...siteSettings, description: e.target.value })} /></label>
+            <label className="grid gap-1 text-sm font-bold">主题色<input type="color" className="h-10 w-20 rounded border border-black/15" value={siteSettings.primaryColor} onChange={(e) => setSiteSettings({ ...siteSettings, primaryColor: e.target.value })} /></label>
+            <div className="flex items-end justify-end"><Button type="submit" disabled={savingSettings}>{savingSettings ? '保存中…' : '保存设置'}</Button></div>
           </form>
         </section>
 

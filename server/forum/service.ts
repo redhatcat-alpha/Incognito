@@ -1029,6 +1029,23 @@ export async function createAnnouncement(input: {
   return { id, level: input.level, title: input.title, body: input.body, startsAt: now, endsAt: input.endsAt, status: 'published' };
 }
 
+export type SiteSettings = { name: string; shortName: string; description: string; primaryColor: string };
+
+export async function getSiteSettings(): Promise<SiteSettings> {
+  const row = await getD1().prepare('SELECT settings_json FROM site_settings ORDER BY version DESC LIMIT 1').first<{ settings_json: string }>();
+  if (!row) return { name: '无名岛', shortName: '无名岛', description: '不需要真实身份的公开讨论社区。', primaryColor: '#d9ff57' };
+  try { return JSON.parse(row.settings_json) as SiteSettings; } catch { return { name: '无名岛', shortName: '无名岛', description: '不需要真实身份的公开讨论社区。', primaryColor: '#d9ff57' }; }
+}
+
+export async function updateSiteSettings(input: SiteSettings) {
+  const db = getD1();
+  const current = await db.prepare('SELECT COALESCE(MAX(version), 0) AS version FROM site_settings').first<{ version: number }>();
+  const version = Number(current?.version ?? 0) + 1;
+  await db.prepare('INSERT INTO site_settings (id, version, settings_json, created_at) VALUES (?, ?, ?, ?)')
+    .bind(`settings-v${version}`, version, JSON.stringify(input), Date.now()).run();
+  return { ...input, version };
+}
+
 /** 管理端：全部公告与各自已读人数。 */
 export async function listAllAnnouncements(): Promise<AdminAnnouncementRow[]> {
   const result = await getD1()

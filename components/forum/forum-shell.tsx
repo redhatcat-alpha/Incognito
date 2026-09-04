@@ -41,7 +41,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { apiJson } from '@/lib/api';
 import { absoluteTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import type { Announcement, BoardSummary } from '@/lib/forum-types';
+import type { Announcement, BoardSummary, SiteSettings } from '@/lib/forum-types';
 
 const boardIcons: Record<string, LucideIcon> = {
   'message-circle': MessageCircle,
@@ -108,6 +108,8 @@ export function ForumShell({ children, right }: { children: React.ReactNode; rig
   const router = useRouter();
   const { me } = useRegisteredUser();
   const { boards, offline } = useBoardList();
+  const [site, setSite] = useState<SiteSettings | null>(null);
+  useEffect(() => { void apiJson<SiteSettings>('/api/v1/site-settings').then(setSite).catch(() => undefined); }, []);
 
   function runSearch(form: HTMLFormElement) {
     const raw = new FormData(form).get('q');
@@ -135,7 +137,7 @@ export function ForumShell({ children, right }: { children: React.ReactNode; rig
             <span className="grid size-9 place-items-center rounded-full bg-[var(--signal)] text-[var(--ink)] transition-transform group-hover:-rotate-6">
               <Hash className="size-5 stroke-[2.6]" />
             </span>
-            <span className="text-lg font-black tracking-[-0.04em]">无名岛</span>
+            <span className="text-lg font-black tracking-[-0.04em]">{site?.shortName ?? '无名岛'}</span>
           </Link>
           <form
             action="/search"

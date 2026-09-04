@@ -74,6 +74,13 @@ export const adminAnnouncementSchema = z.object({
   endsAt: z.number().int().nullable().optional(),
 });
 
+export const siteSettingsSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  shortName: z.string().trim().min(1).max(30),
+  description: z.string().trim().max(240),
+  primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+});
+
 export const loginSchema = z.object({
   username: usernameSchema,
   password: z.string().min(1, '请输入密码').max(72),

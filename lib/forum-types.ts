@@ -97,6 +97,8 @@ export type AdminAnnouncement = {
   readCount: number;
 };
 
+export type SiteSettings = { name: string; shortName: string; description: string; primaryColor: string };
+
 export type AuthMe = {
   username: string;
   uid: number;
