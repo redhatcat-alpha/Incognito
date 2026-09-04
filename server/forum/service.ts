@@ -85,6 +85,8 @@ export type PublicPost = {
   lastRepliedAt: number;
   currentVote: -1 | 0 | 1;
   isMine: boolean;
+  authorName: string | null;
+  authorUid: number | null;
 };
 
 export type PublicReply = {
@@ -140,6 +142,29 @@ export type AnonProfile = {
   activeSessionCount: number;
 };
 
+/** 注册用户公开信息；author 行与其 registered_users.id 共用同一 ID。 */
+export type RegisteredAuthor = { username: string; uid: number };
+
+function isMine(authorId: string, anonUserId?: string, regUserId?: string): boolean {
+  return authorId === anonUserId || (regUserId !== undefined && authorId === regUserId);
+}
+
+async function registeredNamesByIds(db: D1Database, ids: string[]): Promise<Map<string, RegisteredAuthor>> {
+  const names = new Map<string, RegisteredAuthor>();
+  const unique = Array.from(new Set(ids));
+  if (!unique.length) return names;
+  const placeholders = unique.map(() => '?').join(',');
+  const result = await db
+    .prepare(
+      `SELECT id, username, uid FROM registered_users
+       WHERE id IN (${placeholders}) AND status = 'active'`,
+    )
+    .bind(...unique)
+    .all<{ id: string; username: string; uid: number }>();
+  for (const row of result.results) names.set(row.id, { username: row.username, uid: row.uid });
+  return names;
+}
+
 function escapeLike(value: string): string {
   return value.replaceAll(/[\\%_]/g, (match) => `\\${match}`);
 }
@@ -150,6 +175,31 @@ async function assertWritableUser(db: D1Database, userId: string): Promise<void>
     .bind(userId)
     .first<{ status: string }>();
   if (!user || user.status !== 'active') throw new Error('USER_NOT_WRITABLE');
+}
+
+async function assertRegisteredWritable(db: D1Database, userId: string): Promise<void> {
+  const user = await db
+    .prepare('SELECT status FROM registered_users WHERE id = ? LIMIT 1')
+    .bind(userId)
+    .first<{ status: string }>();
+  if (!user) throw new Error('AUTH_REQUIRED');
+  if (user.status !== 'active') throw new Error('ACCOUNT_SUSPENDED');
+}
+
+/** 按发言身份校验并可返回写入作者行 ID */
+async function resolveWriter(
+  db: D1Database,
+  identity: 'anonymous' | 'registered',
+  anonUserId: string,
+  regUserId?: string,
+): Promise<string> {
+  if (identity === 'registered') {
+    if (!regUserId) throw new Error('AUTH_REQUIRED');
+    await assertRegisteredWritable(db, regUserId);
+    return regUserId;
+  }
+  await assertWritableUser(db, anonUserId);
+  return anonUserId;
 }
 
 async function tagsByPostIds(postIds: string[]): Promise<Map<string, string[]>> {
@@ -188,7 +238,13 @@ function mapBoard(row: BoardRow): PublicBoard {
   };
 }
 
-function mapPost(row: PostRow, tags: string[], currentUserId?: string): PublicPost {
+function mapPost(
+  row: PostRow,
+  tags: string[],
+  anonUserId?: string,
+  regUserId?: string,
+  author?: RegisteredAuthor | null,
+): PublicPost {
   return {
     id: row.public_id,
     status: row.status as ContentStatus,
@@ -210,7 +266,9 @@ function mapPost(row: PostRow, tags: string[], currentUserId?: string): PublicPo
     updatedAt: row.updated_at,
     lastRepliedAt: row.last_replied_at,
     currentVote: (row.current_vote ?? 0) as -1 | 0 | 1,
-    isMine: Boolean(currentUserId && row.author_id === currentUserId),
+    isMine: isMine(row.author_id, anonUserId, regUserId),
+    authorName: author?.username ?? null,
+    authorUid: author?.uid ?? null,
   };
 }
 
@@ -247,8 +305,9 @@ function tagLinkStatements(db: D1Database, postId: string, tagIds: string[]): D1
   ];
 }
 
-async function fetchPostDto(userId: string, publicId: string): Promise<PublicPost | null> {
-  const row = await getD1()
+async function fetchPostDto(userId: string, publicId: string, regUserId?: string): Promise<PublicPost | null> {
+  const db = getD1();
+  const row = await db
     .prepare(
       `SELECT p.id, p.public_id, p.board_id, b.slug AS board_slug,
               b.name AS board_name, b.accent AS board_accent, b.status AS board_status,
@@ -261,11 +320,11 @@ async function fetchPostDto(userId: string, publicId: string): Promise<PublicPos
     .bind(publicId)
     .first<PostRow>();
   if (!row) return null;
-  const tagMap = await tagsByPostIds([row.id]);
-  return mapPost(row, tagMap.get(row.id) ?? [], userId);
+  const [tagMap, names] = await Promise.all([tagsByPostIds([row.id]), registeredNamesByIds(db, [row.author_id])]);
+  return mapPost(row, tagMap.get(row.id) ?? [], userId, regUserId, names.get(row.author_id) ?? null);
 }
 
-export async function listForum(userId?: string, boardSlug?: string, sort: 'latest' | 'hot' = 'latest') {
+export async function listForum(userId?: string, boardSlug?: string, sort: 'latest' | 'hot' = 'latest', regUserId?: string) {
   await ensureSeedData();
   const db = getD1();
   const boardResult = await db
@@ -311,7 +370,7 @@ export async function listForum(userId?: string, boardSlug?: string, sort: 'late
   const tagMap = await tagsByPostIds(postResult.results.map((post) => post.id));
   return {
     boards: boardResult.results.map(mapBoard),
-    posts: postResult.results.map((post) => mapPost(post, tagMap.get(post.id) ?? [], userId)),
+    posts: postResult.results.map((post) => mapPost(post, tagMap.get(post.id) ?? [], userId, regUserId, null)),
   };
 }
 
@@ -348,7 +407,7 @@ export async function getBoard(slug: string): Promise<PublicBoard | null> {
   return row ? mapBoard(row) : null;
 }
 
-export async function getThread(publicId: string, userId: string) {
+export async function getThread(publicId: string, userId: string, regUserId?: string) {
   await ensureSeedData();
   const db = getD1();
   const post = await db
@@ -391,10 +450,13 @@ export async function getThread(publicId: string, userId: string) {
     db.prepare('SELECT status FROM anonymous_users WHERE id = ? LIMIT 1').bind(userId).first<{ status: string }>(),
   ]);
 
+  const names = await registeredNamesByIds(db, [post.author_id, ...replyResult.results.map((reply) => reply.author_id)]);
+
   const boardActive = post.board_status === 'active';
   const userWritable = user?.status === 'active';
+  const postAuthor = names.get(post.author_id) ?? null;
   return {
-    post: mapPost(post, tagMap.get(post.id) ?? [], userId),
+    post: mapPost(post, tagMap.get(post.id) ?? [], userId, regUserId, postAuthor),
     replies: replyResult.results.map<PublicReply>((reply) => {
       if (reply.status === 'deleted') {
         return {
@@ -416,16 +478,18 @@ export async function getThread(publicId: string, userId: string) {
         };
       }
       const isOwner = reply.author_id === post.author_id;
+      const replyAuthor = names.get(reply.author_id) ?? null;
       return {
         id: reply.public_id,
         status: 'published',
         floorNo: reply.floor_no,
         body: reply.body,
         quoteReplyId: reply.quote_reply_id,
-        alias: isOwner ? '楼主' : `匿名 A${reply.alias_index ?? '?'}`,
-        avatarSeed: reply.avatar_seed ?? 'anonymous',
+        // 注册作者展示固定用户名；匿名作者沿用线程内代号，楼主自身回复显示“楼主”
+        alias: replyAuthor ? replyAuthor.username : isOwner ? '楼主' : `匿名 A${reply.alias_index ?? '?'}`,
+        avatarSeed: replyAuthor ? `user:${replyAuthor.username}` : (reply.avatar_seed ?? 'anonymous'),
         isOwner,
-        isMine: reply.author_id === userId,
+        isMine: isMine(reply.author_id, userId, regUserId),
         score: reply.up_count - reply.down_count,
         upCount: reply.up_count,
         downCount: reply.down_count,
@@ -445,10 +509,12 @@ export async function getThread(publicId: string, userId: string) {
 export async function createPost(
   userId: string,
   input: { boardSlug: string; title: string; body: string; tags: string[] },
+  identity: 'anonymous' | 'registered' = 'anonymous',
+  regUserId?: string,
 ) {
   await ensureSeedData();
   const db = getD1();
-  await assertWritableUser(db, userId);
+  const authorId = await resolveWriter(db, identity, userId, regUserId);
   const board = await db
     .prepare("SELECT id, status FROM boards WHERE slug = ? AND status != 'hidden' LIMIT 1")
     .bind(input.boardSlug)
@@ -464,20 +530,30 @@ export async function createPost(
   await db.batch([
     db
       .prepare('INSERT INTO posts (id, public_id, board_id, author_id, title, body, status, next_floor_no, up_count, down_count, reply_count, created_at, updated_at, last_replied_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .bind(id, publicId, board.id, userId, input.title, input.body, 'published', 2, 0, 0, 0, createdAt, createdAt, createdAt),
-    db
-      .prepare('INSERT INTO thread_aliases (id, post_id, user_id, alias_index, avatar_seed) VALUES (?, ?, ?, 0, ?)')
-      .bind(crypto.randomUUID(), id, userId, crypto.randomUUID()),
+      .bind(id, publicId, board.id, authorId, input.title, input.body, 'published', 2, 0, 0, 0, createdAt, createdAt, createdAt),
+    // 匿名身份发言需要线程内代号；注册身份固定展示用户名，不占用匿名代号
+    ...(identity === 'anonymous'
+      ? [db
+          .prepare('INSERT INTO thread_aliases (id, post_id, user_id, alias_index, avatar_seed) VALUES (?, ?, ?, 0, ?)')
+          .bind(crypto.randomUUID(), id, authorId, crypto.randomUUID())]
+      : []),
     ...tagLinkStatements(db, id, tagIds),
   ]);
 
-  return fetchPostDto(userId, publicId);
+  return fetchPostDto(authorId, publicId, identity === 'registered' ? authorId : undefined);
 }
 
-export async function createReply(userId: string, postPublicId: string, body: string, quoteReplyId?: string | null) {
+export async function createReply(
+  userId: string,
+  postPublicId: string,
+  body: string,
+  quoteReplyId: string | null | undefined,
+  identity: 'anonymous' | 'registered' = 'anonymous',
+  regUserId?: string,
+) {
   await ensureSeedData();
   const db = getD1();
-  await assertWritableUser(db, userId);
+  const authorId = await resolveWriter(db, identity, userId, regUserId);
   const post = await db
     .prepare(
       `SELECT p.id, p.status, b.status AS board_status
@@ -493,14 +569,19 @@ export async function createReply(userId: string, postPublicId: string, body: st
   const id = crypto.randomUUID();
   const publicId = crypto.randomUUID();
   const timestamp = Date.now();
-  await db.batch([
-    db
-      .prepare(
-        `INSERT OR IGNORE INTO thread_aliases (id, post_id, user_id, alias_index, avatar_seed)
-         SELECT ?, ?, ?, COALESCE(MAX(alias_index), 0) + 1, ?
-         FROM thread_aliases WHERE post_id = ?`,
-      )
-      .bind(crypto.randomUUID(), post.id, userId, crypto.randomUUID(), post.id),
+  const statements: D1PreparedStatement[] = [];
+  if (identity === 'anonymous') {
+    statements.push(
+      db
+        .prepare(
+          `INSERT OR IGNORE INTO thread_aliases (id, post_id, user_id, alias_index, avatar_seed)
+           SELECT ?, ?, ?, COALESCE(MAX(alias_index), 0) + 1, ?
+           FROM thread_aliases WHERE post_id = ?`,
+        )
+        .bind(crypto.randomUUID(), post.id, authorId, crypto.randomUUID(), post.id),
+    );
+  }
+  statements.push(
     db
       .prepare(
         `UPDATE posts
@@ -517,8 +598,9 @@ export async function createReply(userId: string, postPublicId: string, body: st
          SELECT ?, ?, id, ?, next_floor_no - 1, ?, ?, 'published', 0, 0, ?, ?
          FROM posts WHERE id = ? AND status = 'published'`,
       )
-      .bind(id, publicId, userId, body, quoteReplyId ?? null, timestamp, timestamp, post.id),
-  ]);
+      .bind(id, publicId, authorId, body, quoteReplyId ?? null, timestamp, timestamp, post.id),
+  );
+  await db.batch(statements);
 
   return { id: publicId };
 }
@@ -527,6 +609,7 @@ export async function updatePost(
   userId: string,
   publicId: string,
   input: { title: string; body: string; tags: string[] },
+  regUserId?: string,
 ) {
   const db = getD1();
   const post = await db
@@ -535,8 +618,9 @@ export async function updatePost(
     .first<{ id: string; author_id: string; created_at: number; status: string }>();
   if (!post) throw new Error('POST_NOT_FOUND');
   if (post.status === 'deleted') throw new Error('POST_NOT_FOUND');
-  if (post.author_id !== userId) throw new Error('NOT_CONTENT_AUTHOR');
-  await assertWritableUser(db, userId);
+  if (!isMine(post.author_id, userId, regUserId)) throw new Error('NOT_CONTENT_AUTHOR');
+  if (post.author_id === regUserId) await assertRegisteredWritable(db, regUserId!);
+  else await assertWritableUser(db, userId);
   if (post.status !== 'published') throw new Error('POST_LOCKED');
   if (Date.now() - post.created_at > EDIT_WINDOW_MS) throw new Error('EDIT_WINDOW_EXPIRED');
 
@@ -549,17 +633,17 @@ export async function updatePost(
     ...tagLinkStatements(db, post.id, tagIds),
   ]);
 
-  return fetchPostDto(userId, publicId);
+  return fetchPostDto(userId, publicId, post.author_id === regUserId ? regUserId : undefined);
 }
 
-export async function deletePost(userId: string, publicId: string) {
+export async function deletePost(userId: string, publicId: string, regUserId?: string) {
   const db = getD1();
   const post = await db
     .prepare("SELECT id, author_id, status FROM posts WHERE public_id = ? LIMIT 1")
     .bind(publicId)
     .first<{ id: string; author_id: string; status: string }>();
   if (!post || post.status === 'deleted') throw new Error('POST_NOT_FOUND');
-  if (post.author_id !== userId) throw new Error('NOT_CONTENT_AUTHOR');
+  if (!isMine(post.author_id, userId, regUserId)) throw new Error('NOT_CONTENT_AUTHOR');
   if (post.status === 'locked') throw new Error('POST_LOCKED');
 
   const timestamp = Date.now();
@@ -570,7 +654,7 @@ export async function deletePost(userId: string, publicId: string) {
   return { id: publicId, status: 'deleted' };
 }
 
-export async function updateReply(userId: string, publicId: string, body: string) {
+export async function updateReply(userId: string, publicId: string, body: string, regUserId?: string) {
   const db = getD1();
   const reply = await db
     .prepare(
@@ -581,8 +665,9 @@ export async function updateReply(userId: string, publicId: string, body: string
     .bind(publicId)
     .first<{ id: string; author_id: string; created_at: number; status: string; post_status: string }>();
   if (!reply || reply.status === 'deleted') throw new Error('POST_NOT_FOUND');
-  if (reply.author_id !== userId) throw new Error('NOT_CONTENT_AUTHOR');
-  await assertWritableUser(db, userId);
+  if (!isMine(reply.author_id, userId, regUserId)) throw new Error('NOT_CONTENT_AUTHOR');
+  if (reply.author_id === regUserId) await assertRegisteredWritable(db, regUserId!);
+  else await assertWritableUser(db, userId);
   if (reply.post_status !== 'published') throw new Error('POST_LOCKED');
   if (Date.now() - reply.created_at > EDIT_WINDOW_MS) throw new Error('EDIT_WINDOW_EXPIRED');
 
@@ -593,14 +678,14 @@ export async function updateReply(userId: string, publicId: string, body: string
   return { id: publicId };
 }
 
-export async function deleteReply(userId: string, publicId: string) {
+export async function deleteReply(userId: string, publicId: string, regUserId?: string) {
   const db = getD1();
   const reply = await db
     .prepare('SELECT id, author_id, status FROM replies WHERE public_id = ? LIMIT 1')
     .bind(publicId)
     .first<{ id: string; author_id: string; status: string }>();
   if (!reply || reply.status === 'deleted') throw new Error('POST_NOT_FOUND');
-  if (reply.author_id !== userId) throw new Error('NOT_CONTENT_AUTHOR');
+  if (!isMine(reply.author_id, userId, regUserId)) throw new Error('NOT_CONTENT_AUTHOR');
 
   await db
     .prepare("UPDATE replies SET status = 'deleted', body = '', updated_at = ? WHERE id = ?")
@@ -614,6 +699,7 @@ export async function setVote(
   targetType: 'post' | 'reply',
   publicId: string,
   value: -1 | 0 | 1,
+  regUserId?: string,
 ) {
   const db = getD1();
   await assertWritableUser(db, userId);
@@ -623,7 +709,7 @@ export async function setVote(
     .bind(publicId)
     .first<{ id: string; author_id: string; up_count: number; down_count: number }>();
   if (!target) throw new Error('TARGET_NOT_FOUND');
-  if (target.author_id === userId) throw new Error('CANNOT_VOTE_OWN_CONTENT');
+  if (isMine(target.author_id, userId, regUserId)) throw new Error('CANNOT_VOTE_OWN_CONTENT');
 
   const existing = await db
     .prepare('SELECT value FROM votes WHERE user_id = ? AND target_type = ? AND target_id = ? LIMIT 1')
@@ -760,6 +846,7 @@ export async function searchPosts(
   userId: string | undefined,
   query: string,
   filter?: { boardSlug?: string; tag?: string },
+  regUserId?: string,
 ) {
   await ensureSeedData();
   const db = getD1();
@@ -809,7 +896,7 @@ export async function searchPosts(
   return {
     query: keyword,
     total: Number(countResult?.total ?? 0),
-    posts: postResult.results.map((post) => mapPost(post, tagMap.get(post.id) ?? [], userId)),
+    posts: postResult.results.map((post) => mapPost(post, tagMap.get(post.id) ?? [], userId, regUserId, null)),
   };
 }
 

@@ -12,6 +12,14 @@
 - **线程内代号**：同一帖子内同一账号显示固定「匿名 A1/A2…」，楼主显示「楼主」；代号来自 `thread_aliases`，跨帖子不可直接关联。公开 DTO 永不返回内部 `user_id`。
 - 内容删除是**软删除**（`status='deleted'`、清空标题/正文、楼层号不重排）；销毁身份 = 撤销全部会话 + 删历史/投票（并回滚目标计数）+ 内容转占位。
 
+## 账号与发言身份模型（重要）
+
+- 游客永远可用（自动匿名账号）。用户可额外「注册」：`registered_users` 建一行账号，同时在同一 ID 空间建一行 `anonymous_users`（作为署名身份行），**posts/replies.author_id 外键零改动**。
+- 写接口 body 带 `identity: 'anonymous' | 'registered'`；registered 需要独立登录会话（cookie `incognito_user_session`，见 `server/auth/registered.ts`；匿名会话仍自动存在）。
+- 公开展示：署名行作者在帖子/楼层中显示 `username` + 唯一 ID（`uid`，随帖子响应 `authorName/authorUid`），不再分配「匿名 A1」代号；楼层 `isMine` 同时识别匿名会话与注册会话两种归属。
+- 密码只存 PBKDF2-SHA256（`pbkdf2$iter$salt$hash`）。注册会话无 `/api/v1/auth/me` 返回用户 ID——公开层只有 username/uid/createdAt。
+- 改这里前先读 `server/auth/registered.ts`、`server/forum/service.ts` 的 `resolveWriter / isMine / registeredNamesByIds`。
+
 ## 常用命令
 
 ```bash

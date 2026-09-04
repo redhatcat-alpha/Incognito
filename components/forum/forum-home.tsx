@@ -12,6 +12,7 @@ import { AnnouncementStrip, ForumShell } from '@/components/forum/forum-shell';
 import { NewPostDialog, createPostRequest } from '@/components/forum/new-post-dialog';
 import { PostList } from '@/components/forum/post-list';
 import { apiJson } from '@/lib/api';
+import { useRegisteredUser } from '@/lib/use-registered-user';
 import { relativeTime } from '@/lib/format';
 import type { ForumData, HistoryData, PostSummary } from '@/lib/forum-types';
 
@@ -37,6 +38,7 @@ function PostRowSkeleton() {
 export function ForumHome({ boardSlug }: { boardSlug?: string }) {
   const [forum, setForum] = useState<ForumData>({ boards: [], posts: [] });
   const [historyData, setHistoryData] = useState<HistoryData>({ enabled: true, entries: [] });
+  const { me } = useRegisteredUser();
   const [state, setState] = useState<LoadState>('loading');
   const [tab, setTab] = useState('latest');
 
@@ -227,7 +229,7 @@ export function ForumHome({ boardSlug }: { boardSlug?: string }) {
                 : '匿名说点真心话，或围观别人的故事。'}
             </p>
           </div>
-          <NewPostDialog boards={postBoards} onCreated={addPost} />
+          <NewPostDialog boards={postBoards} onCreated={addPost} me={me} />
         </div>
 
         {state === 'offline' ? (

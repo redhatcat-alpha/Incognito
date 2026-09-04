@@ -45,9 +45,11 @@ import { Markdown } from '@/components/forum/markdown';
 import { ThreadAvatar } from '@/components/forum/thread-avatar';
 import { apiJson } from '@/lib/api';
 import { absoluteTime, relativeTime } from '@/lib/format';
+import { useRegisteredUser } from '@/lib/use-registered-user';
 import type { PostSummary, ReplySummary, ThreadData } from '@/lib/forum-types';
 import { reportReasons } from '@/lib/report-reasons';
 import { cn } from '@/lib/utils';
+import { IdentityPicker, type Identity } from '@/components/forum/identity-picker';
 
 const EDIT_WINDOW_MS = 30 * 60 * 1000;
 
@@ -202,8 +204,10 @@ export function ThreadView({ postId }: { postId: string }) {
   const [loadError, setLoadError] = useState('');
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<GlobalNotice>(null);
+  const { me } = useRegisteredUser();
   const [quote, setQuote] = useState<{ replyId: string; floorNo: number; alias: string } | null>(null);
   const [draft, setDraft] = useState('');
+  const [identity, setIdentity] = useState<Identity>('anonymous');
   const [sending, setSending] = useState(false);
   const [readFloor, setReadFloor] = useState(1);
   const [busyVotes, setBusyVotes] = useState<Set<string>>(new Set());
@@ -420,7 +424,7 @@ export function ThreadView({ postId }: { postId: string }) {
       await apiJson(`/api/v1/posts/${encodeURIComponent(postId)}/replies`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ body: draft.trim(), quoteReplyId: quote?.replyId ?? null }),
+        body: JSON.stringify({ body: draft.trim(), quoteReplyId: quote?.replyId ?? null, identity }),
       });
       const newFloorNo = thread.totalFloors + 1;
       setDraft('');
@@ -568,10 +572,11 @@ export function ThreadView({ postId }: { postId: string }) {
       ) : (
         <article className="rounded-2xl border border-black/10 bg-white p-5 sm:p-7">
           <div className="mb-4 flex items-center gap-3">
-            <ThreadAvatar seed={post.board.accent + post.id} label="" className="size-11" />
+            <ThreadAvatar seed={post.authorName ? `user:${post.authorName}` : post.board.accent + post.id} label="" className="size-11" />
             <div className="min-w-0">
               <p className="flex flex-wrap items-center gap-2">
-                <span className="font-black">楼主</span>
+                <span className="font-black">{post.authorName ?? '楼主'}</span>
+                {post.authorName ? <span className="text-[10px] font-bold text-muted-foreground">ID #{post.authorUid}</span> : null}
                 {post.isMine ? <Badge variant="outline" className="h-5 border-[var(--signal-dark)]/40 bg-[var(--signal)]/30 px-1.5 text-[10px] font-bold">我发布的</Badge> : null}
               </p>
               <p className="text-xs text-muted-foreground">{absoluteTime(post.createdAt)}</p>
@@ -698,6 +703,9 @@ export function ThreadView({ postId }: { postId: string }) {
           </p>
         ) : (
           <form onSubmit={(event) => void submitReply(event)}>
+            <div className="mb-3">
+              <IdentityPicker me={me} value={identity} onChange={setIdentity} />
+            </div>
             {quote ? (
               <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-black/10 bg-[#f8faf6] px-3 py-2 text-sm">
                 <span className="text-muted-foreground">正在引用</span>

@@ -28,6 +28,8 @@ export type PostSummary = {
   lastRepliedAt: number;
   currentVote: -1 | 0 | 1;
   isMine: boolean;
+  authorName: string | null;
+  authorUid: number | null;
 };
 
 export type ReplySummary = {
@@ -78,6 +80,12 @@ export type Announcement = {
   body: string;
   startsAt: number;
   endsAt: number | null;
+  createdAt: number;
+};
+
+export type AuthMe = {
+  username: string;
+  uid: number;
   createdAt: number;
 };
 

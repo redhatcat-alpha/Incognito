@@ -16,18 +16,20 @@ import {
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { apiJson } from '@/lib/api';
-import type { BoardSummary, PostSummary } from '@/lib/forum-types';
+import type { BoardSummary, PostSummary, AuthMe } from '@/lib/forum-types';
+import { IdentityPicker, type Identity } from '@/components/forum/identity-picker';
 
 export async function createPostRequest(input: {
   boardSlug: string;
   title: string;
   body: string;
   tags: string[];
+  identity?: Identity;
 }): Promise<PostSummary> {
   const data = await apiJson<PostSummary>('/api/v1/posts', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, identity: input.identity ?? 'anonymous' }),
   });
   return data;
 }
@@ -35,15 +37,18 @@ export async function createPostRequest(input: {
 export function NewPostDialog({
   boards,
   onCreated,
+  me = null,
 }: {
   boards: BoardSummary[];
   onCreated: (post: PostSummary) => void;
+  me?: AuthMe | null;
 }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [boardSlug, setBoardSlug] = useState(boards.find((board) => board.status === 'active')?.slug ?? boards[0]?.slug ?? '');
   const [tags, setTags] = useState('');
+  const [identity, setIdentity] = useState<Identity>('anonymous');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -52,19 +57,22 @@ export function NewPostDialog({
 
   async function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
+    const activeBoard = boardSlug || writableBoards[0]?.slug || '';
     setSaving(true);
     setError('');
     try {
       const post = await createPostRequest({
-        boardSlug,
+        boardSlug: activeBoard,
         title,
         body,
         tags: tags.split(/[,，]/).map((tag) => tag.trim()).filter(Boolean).slice(0, 5),
+        identity,
       });
       onCreated(post);
       setTitle('');
       setBody('');
       setTags('');
+      setIdentity('anonymous');
       setOpen(false);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '发布失败，请稍后重试');
@@ -73,8 +81,13 @@ export function NewPostDialog({
     }
   }
 
+  const openDialog = (next: boolean) => {
+    setOpen(next);
+    if (next && !boardSlug && writableBoards[0]) setBoardSlug(writableBoards[0].slug);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={openDialog}>
       <DialogTrigger
         render={<Button className="h-10 rounded-full bg-[var(--ink)] px-5 text-white hover:bg-[var(--ink-soft)]" />}
       >
@@ -139,6 +152,10 @@ export function NewPostDialog({
                 placeholder="例如：职场，求助"
               />
             </label>
+            <div className="grid gap-1.5 text-sm font-semibold">
+              发言身份
+              <IdentityPicker me={me} value={identity} onChange={setIdentity} />
+            </div>
             {error ? (
               <p role="alert" className="text-sm font-semibold text-destructive">
                 {error}

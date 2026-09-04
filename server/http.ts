@@ -15,6 +15,10 @@ const safeErrors: Record<string, { status: number; message: string }> = {
   USER_NOT_WRITABLE: { status: 403, message: '当前匿名账号暂时不能发言' },
   CANNOT_REVOKE_CURRENT: { status: 409, message: '不能撤销当前正在使用的会话，请使用“退出当前设备”' },
   INVALID_QUERY: { status: 400, message: '搜索关键词无效' },
+  USERNAME_TAKEN: { status: 409, message: '这个用户名已经被注册了' },
+  INVALID_CREDENTIALS: { status: 401, message: '用户名或密码不正确' },
+  AUTH_REQUIRED: { status: 401, message: '请先登录后再使用固定身份发言' },
+  ACCOUNT_SUSPENDED: { status: 403, message: '该账号当前不可用，请联系管理员' },
 };
 
 export function jsonError(error: unknown) {

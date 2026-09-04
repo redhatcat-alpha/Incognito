@@ -22,7 +22,9 @@ import { ThreadAvatar } from '@/components/forum/thread-avatar';
 import { Section, SettingsTabs } from '@/components/forum/settings-ui';
 import { apiJson } from '@/lib/api';
 import { absoluteTime, relativeTime } from '@/lib/format';
-import type { AnonProfile, AnonSessionInfo } from '@/lib/forum-types';
+import type { AnonProfile, AnonSessionInfo, AuthMe } from '@/lib/forum-types';
+import { useRegisteredUser, type RegisteredUserState } from '@/lib/use-registered-user';
+import { cn } from '@/lib/utils';
 
 function statusLabel(status: string): { label: string; tone: 'default' | 'warning' | 'danger' } {
   switch (status) {
@@ -39,6 +41,7 @@ function statusLabel(status: string): { label: string; tone: 'default' | 'warnin
 }
 
 export function SettingsProfileView() {
+  const registered = useRegisteredUser();
   const [profile, setProfile] = useState<AnonProfile | null>(null);
   const [sessions, setSessions] = useState<AnonSessionInfo[]>([]);
   const [notice, setNotice] = useState('');
@@ -89,6 +92,8 @@ export function SettingsProfileView() {
         <p className="mt-2 text-sm text-muted-foreground">管理匿名形象、设备会话与隐私数据。这里不涉及任何真实身份信息。</p>
       </div>
       <SettingsTabs />
+
+      <AccountSection me={registered.me} refresh={registered.refresh} />
 
       {notice ? (
         <p aria-live="polite" className="rounded-xl border border-emerald-500/30 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900">
@@ -242,4 +247,153 @@ function cnBadge(tone: 'default' | 'warning' | 'danger'): string {
     default:
       return 'h-5 rounded-full bg-[var(--signal)] px-2 text-[10px] font-black text-[var(--ink)]';
   }
+}
+
+
+function AccountSection({
+  me,
+  refresh,
+}: {
+  me: AuthMe | null;
+  refresh: RegisteredUserState['refresh'];
+}) {
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [justLoggedOut, setJustLoggedOut] = useState(false);
+
+  async function submit(event: { preventDefault: () => void }) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await apiJson(`/api/v1/auth/${mode}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ username: username.trim(), password }),
+      });
+      setUsername('');
+      setPassword('');
+      setJustLoggedOut(false);
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '操作失败，请稍后重试');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function logout() {
+    setBusy(true);
+    try {
+      await apiJson('/api/v1/auth/logout', { method: 'POST' });
+      await refresh();
+      setJustLoggedOut(true);
+    } catch {
+      setError('退出失败，请稍后重试');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (me) {
+    return (
+      <Section
+        title="注册账号与固定 ID"
+        description="用注册身份发帖 / 回复时，内容会跨帖子展示你的用户名与唯一 ID，不再随机变化；仍可随时改用匿名发言。"
+      >
+        <div className="flex flex-wrap items-center gap-4 rounded-xl bg-[#f8faf6] p-4">
+          <span className="grid size-12 place-items-center rounded-full bg-[var(--signal)] text-xl font-black text-[var(--ink)]" aria-hidden="true">
+            {me.username.slice(0, 1).toUpperCase()}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="flex flex-wrap items-center gap-2 text-lg font-black">
+              {me.username}
+              <span className="rounded-full bg-[var(--ink)]/[0.06] px-2 py-0.5 font-mono text-[11px] font-bold text-muted-foreground">
+                唯一 ID #{me.uid}
+              </span>
+            </p>
+            <p className="mt-0.5 text-sm text-muted-foreground">注册于 {absoluteTime(me.createdAt)}</p>
+          </div>
+          <Button variant="outline" className="rounded-full bg-white text-muted-foreground" disabled={busy} onClick={() => void logout()}>
+            {busy ? '正在退出…' : '退出登录'}
+          </Button>
+        </div>
+        {justLoggedOut ? (
+          <p aria-live="polite" className="mt-3 text-sm text-muted-foreground">
+            已退出。之后发言将回到匿名身份。
+          </p>
+        ) : null}
+      </Section>
+    );
+  }
+
+  return (
+    <Section
+      title="注册账号与固定 ID"
+      description="注册后发帖 / 回复可选择「以用户名发言」：每条内容都会带上你的用户名与唯一 ID（#编号），跨帖子可被认出；未注册时只能匿名发言。无需邮箱或手机号。"
+    >
+      <div className="rounded-xl border border-black/10 bg-white p-4">
+        <div className="mb-4 flex gap-2" role="tablist" aria-label="登录或注册">
+          {(['login', 'register'] as const).map((item) => (
+            <button
+              key={item}
+              type="button"
+              role="tab"
+              aria-selected={mode === item}
+              onClick={() => setMode(item)}
+              className={cn(
+                'rounded-full px-4 py-1.5 text-sm font-bold transition-colors',
+                mode === item ? 'bg-[var(--ink)] text-white' : 'text-muted-foreground hover:bg-black/5',
+              )}
+            >
+              {item === 'login' ? '登录' : '注册'}
+            </button>
+          ))}
+        </div>
+        <form onSubmit={(event) => void submit(event)} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+          <label className="grid gap-1 text-xs font-bold text-muted-foreground">
+            用户名
+            <input
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              className="h-10 rounded-lg border border-black/15 bg-white px-3 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-[var(--signal)]"
+              placeholder="中英文、数字、_-，3-20 字符"
+              minLength={3}
+              maxLength={20}
+              required
+              autoComplete="username"
+            />
+          </label>
+          <label className="grid gap-1 text-xs font-bold text-muted-foreground">
+            密码
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              className="h-10 rounded-lg border border-black/15 bg-white px-3 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-[var(--signal)]"
+              placeholder={mode === 'register' ? '至少 8 位' : '输入密码'}
+              minLength={mode === 'register' ? 8 : 1}
+              maxLength={72}
+              required
+              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+            />
+          </label>
+          <Button type="submit" disabled={busy || username.trim().length < 3 || password.length < (mode === 'register' ? 8 : 1)} className="self-end rounded-full">
+            {busy ? '请稍候…' : mode === 'login' ? '登录' : '注册'}
+          </Button>
+        </form>
+        {error ? (
+          <p role="alert" className="mt-3 text-sm font-semibold text-destructive">{error}</p>
+        ) : null}
+        {mode === 'register' ? (
+          <p className="mt-3 text-xs leading-5 text-muted-foreground">
+            注册即表示你同意以用户名公开发言的内容无法匿名隐藏；不填写任何真实身份信息，密码仅以不可逆方式存储。
+          </p>
+        ) : null}
+      </div>
+    </Section>
+  );
 }

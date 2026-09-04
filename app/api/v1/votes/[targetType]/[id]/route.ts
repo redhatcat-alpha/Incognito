@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { applySessionCookie, ensureAnonymousSession } from '@/server/auth/anonymous';
 import { voteSchema } from '@/server/forum/schemas';
 import { setVote } from '@/server/forum/service';
+import { registeredAnonId } from '@/server/auth/registered';
 import { jsonError } from '@/server/http';
 
 const targetTypeSchema = z.enum(['post', 'reply']);
@@ -17,7 +18,8 @@ export async function PUT(
     const params = await context.params;
     const targetType = targetTypeSchema.parse(params.targetType);
     const input = voteSchema.parse(await request.json());
-    const data = await setVote(session.userId, targetType, params.id, input.value);
+    const regId = await registeredAnonId(request);
+    const data = await setVote(session.userId, targetType, params.id, input.value, regId ?? undefined);
     return applySessionCookie(NextResponse.json({ data, error: null }), session);
   } catch (error) {
     return jsonError(error);

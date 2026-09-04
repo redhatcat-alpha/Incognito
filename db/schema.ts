@@ -26,6 +26,44 @@ export const anonymousSessions = sqliteTable(
   ],
 );
 
+/**
+ * 注册账号。id 与 anonymous_users 共享同一 ID 空间：注册时同时创建一行
+ * anonymous_users 作为“署名身份”，其发布内容以 username 展示而非匿名代号。
+ * 这样 posts/replies.author_id 的外键约束不需要任何改动。
+ */
+export const registeredUsers = sqliteTable(
+  'registered_users',
+  {
+    id: text('id').primaryKey().references(() => anonymousUsers.id),
+    uid: integer('uid').notNull(),
+    username: text('username').notNull(),
+    passHash: text('pass_hash').notNull(),
+    status: text('status').notNull().default('active'),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('uq_registered_users_uid').on(table.uid),
+    uniqueIndex('uq_registered_users_username').on(table.username),
+  ],
+);
+
+export const registeredSessions = sqliteTable(
+  'registered_sessions',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull().references(() => registeredUsers.id),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: integer('expires_at').notNull(),
+    createdAt: integer('created_at').notNull(),
+    lastUsedAt: integer('last_used_at').notNull(),
+    revokedAt: integer('revoked_at'),
+  },
+  (table) => [
+    uniqueIndex('uq_registered_sessions_token_hash').on(table.tokenHash),
+    index('idx_registered_sessions_user_id').on(table.userId),
+  ],
+);
+
 export const boards = sqliteTable(
   'boards',
   {
