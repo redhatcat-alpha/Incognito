@@ -3,7 +3,7 @@ import { env } from 'cloudflare:workers';
 
 import { ensureAnonymousSession } from '@/server/auth/anonymous';
 import { jsonError } from '@/server/http';
-import { stripJpegExif } from '@/lib/media';
+import { stripJpegExif, stripPngMetadata, stripWebpMetadata } from '@/lib/media';
 
 const ALLOWED = new Map([
   ['image/jpeg', 'jpg'],
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     const id = crypto.randomUUID();
     const key = `uploads/${id}.${extension}`;
     const source = new Uint8Array(await file.arrayBuffer());
-    const stored = extension === 'jpg' ? stripJpegExif(source) : source;
+    const stored = extension === 'jpg' ? stripJpegExif(source) : extension === 'png' ? stripPngMetadata(source) : stripWebpMetadata(source);
     await env.FILES.put(key, stored, { httpMetadata: { contentType: file.type, cacheControl: 'public, max-age=31536000, immutable' }, customMetadata: { uploadedAt: new Date().toISOString(), exifStripped: extension === 'jpg' ? 'true' : 'not-applicable' } });
     return NextResponse.json({ data: { id, url: `/api/v1/media/${id}`, contentType: file.type, size: stored.byteLength }, error: null }, { status: 201 });
   } catch (error) { return jsonError(error); }
