@@ -428,6 +428,15 @@ export async function listAdminBoards() {
   return result.results.map(mapBoard);
 }
 
+export async function createBoard(input: { slug: string; name: string; description: string; icon: string; accent: string; status: string; sortOrder: number }) {
+  const now = Date.now();
+  try {
+    await getD1().prepare('INSERT INTO boards (id, slug, name, description, icon, accent, status, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(crypto.randomUUID(), input.slug, input.name, input.description, input.icon, input.accent, input.status, input.sortOrder, now, now).run();
+  } catch { throw new Error('BOARD_SLUG_EXISTS'); }
+  return input;
+}
+
 export async function updateBoard(slug: string, input: { name: string; description: string; icon: string; accent: string; status: string; sortOrder: number }) {
   const result = await getD1().prepare('UPDATE boards SET name = ?, description = ?, icon = ?, accent = ?, status = ?, sort_order = ?, updated_at = ? WHERE slug = ?')
     .bind(input.name, input.description, input.icon, input.accent, input.status, input.sortOrder, Date.now(), slug).run();

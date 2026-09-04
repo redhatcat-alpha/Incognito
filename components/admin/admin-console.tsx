@@ -44,6 +44,7 @@ export function AdminConsole() {
   const [list, setList] = useState<AdminAnnouncement[]>([]);
   const [reports, setReports] = useState<AdminReport[]>([]);
   const [boards, setBoards] = useState<BoardSummary[]>([]);
+  const [newBoard, setNewBoard] = useState({ slug: '', name: '', description: '', icon: 'message-circle', accent: '#d9ff57' });
   const [tags, setTags] = useState<AdminTag[]>([]);
   const [siteSettings, setSiteSettings] = useState({ name: '', shortName: '', description: '', primaryColor: '#d9ff57' });
   const [savingSettings, setSavingSettings] = useState(false);
@@ -166,6 +167,12 @@ export function AdminConsole() {
       await apiJson(`/api/v1/admin/boards/${encodeURIComponent(board.slug)}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: board.name, description: board.description, icon: board.icon, accent: board.accent, status: board.status, sortOrder: boards.indexOf(board) }) });
       flash(`板块「${board.name}」已保存`);
     } catch (cause) { flash(cause instanceof Error ? cause.message : '板块保存失败'); }
+  }
+
+  async function createBoard(event: { preventDefault: () => void }) {
+    event.preventDefault();
+    try { const created = await apiJson<BoardSummary>('/api/v1/admin/boards', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...newBoard, status: 'active', sortOrder: boards.length }) }); setBoards((items) => [...items, created]); setNewBoard({ slug: '', name: '', description: '', icon: 'message-circle', accent: '#d9ff57' }); flash('板块已创建'); }
+    catch (cause) { flash(cause instanceof Error ? cause.message : '板块创建失败'); }
   }
 
   async function saveTag(tag: AdminTag) {
@@ -296,6 +303,7 @@ export function AdminConsole() {
         <section className="rounded-2xl border border-black/10 bg-white p-6">
           <h2 className="text-lg font-black tracking-tight">板块管理</h2>
           <p className="mt-1 text-sm text-muted-foreground">编辑板块展示信息、状态和排序；隐藏板块不会出现在前台。</p>
+          <form onSubmit={(event) => void createBoard(event)} className="mt-4 grid gap-2 rounded-xl border border-dashed border-black/20 p-3 sm:grid-cols-2"><input required pattern="[a-z0-9-]+" placeholder="slug，如 games" className="h-9 rounded-lg border border-black/15 px-2 text-sm" value={newBoard.slug} onChange={(e) => setNewBoard({ ...newBoard, slug: e.target.value })} /><input required placeholder="板块名称" className="h-9 rounded-lg border border-black/15 px-2 text-sm" value={newBoard.name} onChange={(e) => setNewBoard({ ...newBoard, name: e.target.value })} /><input placeholder="板块描述" className="h-9 rounded-lg border border-black/15 px-2 text-sm" value={newBoard.description} onChange={(e) => setNewBoard({ ...newBoard, description: e.target.value })} /><Button type="submit" className="h-9 rounded-full">新建板块</Button></form>
           <div className="mt-4 grid gap-3">
             {boards.map((board, index) => (
               <div key={board.slug} className="rounded-xl border border-black/10 bg-[#f8faf6] p-4">

@@ -95,6 +95,10 @@ export const adminBoardPatchSchema = z.object({
   sortOrder: z.number().int().min(0).max(9999),
 });
 
+export const adminBoardCreateSchema = adminBoardPatchSchema.extend({
+  slug: z.string().trim().min(2).max(30).regex(/^[a-z0-9-]+$/),
+});
+
 export const adminTagPatchSchema = z.object({
   name: z.string().trim().min(1).max(30),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
