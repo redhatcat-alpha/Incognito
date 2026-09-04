@@ -86,6 +86,15 @@ export const siteSettingsSchema = z.object({
   primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
 });
 
+export const adminBoardPatchSchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  description: z.string().trim().max(240),
+  icon: z.string().trim().min(1).max(40),
+  accent: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  status: z.enum(['active', 'readonly', 'archived', 'hidden']),
+  sortOrder: z.number().int().min(0).max(9999),
+});
+
 export const loginSchema = z.object({
   username: usernameSchema,
   password: z.string().min(1, '请输入密码').max(72),

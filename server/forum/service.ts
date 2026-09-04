@@ -417,6 +417,19 @@ export async function listBoards() {
   return result.results.map(mapBoard);
 }
 
+export async function listAdminBoards() {
+  await ensureSeedData();
+  const result = await getD1().prepare(`SELECT b.id, b.slug, b.name, b.description, b.icon, b.accent, b.status, COUNT(p.id) AS post_count FROM boards b LEFT JOIN posts p ON p.board_id = b.id AND p.status IN ('published','locked') GROUP BY b.id ORDER BY b.sort_order ASC`).all<BoardRow>();
+  return result.results.map(mapBoard);
+}
+
+export async function updateBoard(slug: string, input: { name: string; description: string; icon: string; accent: string; status: string; sortOrder: number }) {
+  const result = await getD1().prepare('UPDATE boards SET name = ?, description = ?, icon = ?, accent = ?, status = ?, sort_order = ?, updated_at = ? WHERE slug = ?')
+    .bind(input.name, input.description, input.icon, input.accent, input.status, input.sortOrder, Date.now(), slug).run();
+  if (result.meta.changes === 0) throw new Error('POST_NOT_FOUND');
+  return { slug, ...input };
+}
+
 export async function getBoard(slug: string): Promise<PublicBoard | null> {
   await ensureSeedData();
   const row = await getD1()
