@@ -430,6 +430,17 @@ export async function updateBoard(slug: string, input: { name: string; descripti
   return { slug, ...input };
 }
 
+export async function listAdminTags() {
+  const result = await getD1().prepare(`SELECT t.id, t.slug, t.name, t.color, t.status, COUNT(pt.post_id) AS post_count FROM tags t LEFT JOIN post_tags pt ON pt.tag_id = t.id GROUP BY t.id ORDER BY post_count DESC, t.name ASC LIMIT 500`).all<{ id: string; slug: string; name: string; color: string; status: string; post_count: number }>();
+  return result.results.map((row) => ({ id: row.id, slug: row.slug, name: row.name, color: row.color, status: row.status, postCount: Number(row.post_count) }));
+}
+
+export async function updateTag(slug: string, input: { name: string; color: string; status: string }) {
+  const result = await getD1().prepare('UPDATE tags SET name = ?, color = ?, status = ? WHERE slug = ?').bind(input.name, input.color, input.status, slug).run();
+  if (result.meta.changes === 0) throw new Error('POST_NOT_FOUND');
+  return { slug, ...input };
+}
+
 export async function getBoard(slug: string): Promise<PublicBoard | null> {
   await ensureSeedData();
   const row = await getD1()

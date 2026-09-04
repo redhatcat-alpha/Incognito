@@ -95,6 +95,12 @@ export const adminBoardPatchSchema = z.object({
   sortOrder: z.number().int().min(0).max(9999),
 });
 
+export const adminTagPatchSchema = z.object({
+  name: z.string().trim().min(1).max(30),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  status: z.enum(['active', 'hidden']),
+});
+
 export const loginSchema = z.object({
   username: usernameSchema,
   password: z.string().min(1, '请输入密码').max(72),

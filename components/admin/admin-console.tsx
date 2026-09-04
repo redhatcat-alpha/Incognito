@@ -22,6 +22,7 @@ const levels = [
 type Level = (typeof levels)[number]['value'];
 type AdminMe = { username: string; role: string } | null;
 type AdminReport = { id: string; targetType: 'post' | 'reply'; targetPublicId: string; targetTitle: string; reason: string; details: string; status: string; createdAt: number };
+type AdminTag = { id: string; slug: string; name: string; color: string; status: 'active' | 'hidden'; postCount: number };
 
 export function AdminConsole() {
   const [me, setMe] = useState<AdminMe | null>(null);
@@ -43,6 +44,7 @@ export function AdminConsole() {
   const [list, setList] = useState<AdminAnnouncement[]>([]);
   const [reports, setReports] = useState<AdminReport[]>([]);
   const [boards, setBoards] = useState<BoardSummary[]>([]);
+  const [tags, setTags] = useState<AdminTag[]>([]);
   const [siteSettings, setSiteSettings] = useState({ name: '', shortName: '', description: '', primaryColor: '#d9ff57' });
   const [savingSettings, setSavingSettings] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -56,6 +58,7 @@ export function AdminConsole() {
       const settingsData = await apiJson<typeof siteSettings>('/api/v1/admin/site-settings');
       setSiteSettings(settingsData);
       setBoards(await apiJson<BoardSummary[]>('/api/v1/admin/boards'));
+      setTags(await apiJson<AdminTag[]>('/api/v1/admin/tags'));
     } catch {
       // 列表加载失败静默
     }
@@ -163,6 +166,11 @@ export function AdminConsole() {
       await apiJson(`/api/v1/admin/boards/${encodeURIComponent(board.slug)}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: board.name, description: board.description, icon: board.icon, accent: board.accent, status: board.status, sortOrder: boards.indexOf(board) }) });
       flash(`板块「${board.name}」已保存`);
     } catch (cause) { flash(cause instanceof Error ? cause.message : '板块保存失败'); }
+  }
+
+  async function saveTag(tag: AdminTag) {
+    try { await apiJson(`/api/v1/admin/tags/${encodeURIComponent(tag.slug)}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: tag.name, color: tag.color, status: tag.status }) }); flash(`标签「${tag.name}」已保存`); }
+    catch (cause) { flash(cause instanceof Error ? cause.message : '标签保存失败'); }
   }
 
   if (checking) {
@@ -275,6 +283,14 @@ export function AdminConsole() {
               </Button>
             </div>
           </form>
+        </section>
+
+        <section className="rounded-2xl border border-black/10 bg-white p-6">
+          <h2 className="text-lg font-black tracking-tight">标签管理</h2>
+          <p className="mt-1 text-sm text-muted-foreground">调整标签名称、颜色和前台可见状态。</p>
+          <div className="mt-4 grid gap-2">
+            {tags.map((tag) => <div key={tag.slug} className="flex flex-wrap items-center gap-2 rounded-xl border border-black/10 bg-[#f8faf6] p-3"><input className="h-9 min-w-32 flex-1 rounded-lg border border-black/15 bg-white px-2 text-sm" value={tag.name} onChange={(e) => setTags((items) => items.map((item) => item.slug === tag.slug ? { ...item, name: e.target.value } : item))} /><input type="color" className="h-9 w-12 rounded border border-black/15" value={tag.color} onChange={(e) => setTags((items) => items.map((item) => item.slug === tag.slug ? { ...item, color: e.target.value } : item))} /><select className="h-9 rounded-lg border border-black/15 bg-white px-2 text-sm" value={tag.status} onChange={(e) => setTags((items) => items.map((item) => item.slug === tag.slug ? { ...item, status: e.target.value as AdminTag['status'] } : item))}><option value="active">可见</option><option value="hidden">隐藏</option></select><span className="text-xs text-muted-foreground">#{tag.slug} · {tag.postCount}</span><Button size="sm" className="h-8 rounded-full" onClick={() => void saveTag(tag)}>保存</Button></div>)}
+          </div>
         </section>
 
         <section className="rounded-2xl border border-black/10 bg-white p-6">
