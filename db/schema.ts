@@ -26,6 +26,18 @@ export const anonymousSessions = sqliteTable(
   ],
 );
 
+export const anonymousRecoveries = sqliteTable(
+  'anonymous_recoveries',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull().references(() => anonymousUsers.id),
+    phraseHash: text('phrase_hash').notNull(),
+    createdAt: integer('created_at').notNull(),
+    revokedAt: integer('revoked_at'),
+  },
+  (table) => [uniqueIndex('uq_anonymous_recoveries_hash').on(table.phraseHash), index('idx_anonymous_recoveries_user').on(table.userId)],
+);
+
 /**
  * 注册账号。id 与 anonymous_users 共享同一 ID 空间：注册时同时创建一行
  * anonymous_users 作为“署名身份”，其发布内容以 username 展示而非匿名代号。

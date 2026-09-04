@@ -47,6 +47,8 @@ export function SettingsProfileView() {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [recoveryPhrase, setRecoveryPhrase] = useState('');
+  const [creatingRecovery, setCreatingRecovery] = useState(false);
 
   const load = useCallback(async () => {
     setError('');
@@ -177,6 +179,12 @@ export function SettingsProfileView() {
                   清除浏览器数据或退出当前设备都会让身份令牌失效，且当前版本暂不支持恢复短语或 Passkey。请勿在公共设备上留下登录状态。
                 </span>
               </p>
+            </div>
+            <div className="mt-4 rounded-xl border border-amber-300/60 bg-amber-50 p-4 text-sm">
+              <p className="font-bold text-amber-950">跨设备恢复</p>
+              <p className="mt-1 text-amber-900/80">生成一次性恢复短语。服务端只保存哈希，请立即抄写保存，离开页面后不会再次显示。</p>
+              <Button type="button" size="sm" variant="outline" className="mt-3 rounded-full bg-white" disabled={creatingRecovery} onClick={async () => { setCreatingRecovery(true); try { const data = await apiJson<{ phrase: string }>('/api/v1/anon/recovery', { method: 'POST' }); setRecoveryPhrase(data.phrase); } catch (cause) { setError(cause instanceof Error ? cause.message : '生成失败'); } finally { setCreatingRecovery(false); } }}>{creatingRecovery ? '生成中…' : '生成恢复短语'}</Button>
+              {recoveryPhrase ? <p className="mt-3 select-all rounded-lg bg-white px-3 py-2 font-mono font-bold tracking-wider text-amber-950">{recoveryPhrase}</p> : null}
             </div>
           </Section>
 

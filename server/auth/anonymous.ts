@@ -94,6 +94,15 @@ export async function ensureAnonymousSession(request: Request): Promise<Anonymou
   return { userId, setCookie: serializeCookie(nextToken, request) };
 }
 
+export async function createSessionForUser(userId: string, request: Request): Promise<AnonymousSession> {
+  const now = Date.now();
+  const nextToken = createToken();
+  const tokenHash = await hashToken(nextToken);
+  await getD1().prepare('INSERT INTO anonymous_sessions (id, user_id, token_hash, expires_at, created_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(crypto.randomUUID(), userId, tokenHash, now + SESSION_TTL_SECONDS * 1000, now, now).run();
+  return { userId, setCookie: serializeCookie(nextToken, request) };
+}
+
 export function applySessionCookie(response: Response, session: AnonymousSession): Response {
   if (session.setCookie) response.headers.append('Set-Cookie', session.setCookie);
   return response;
