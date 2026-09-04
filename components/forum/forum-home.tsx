@@ -1,4 +1,3 @@
-console.error('FH-MODULE-LOAD');
 'use client';
 
 import Link from 'next/link';
@@ -40,9 +39,7 @@ function PostRowSkeleton() {
 }
 
 export function ForumHome({ boardSlug }: { boardSlug?: string }) {
-  console.error('FH-RENDER-START');
-  console.error('FH-BEFORE-HOOKS');
-  const [forum, setForum] = useState<ForumData>({ boards: [], posts: [] });
+      const [forum, setForum] = useState<ForumData>({ boards: [], posts: [] });
   const [historyData, setHistoryData] = useState<HistoryData>({ enabled: true, entries: [] });
   const { me } = useRegisteredUser();
   const [state, setState] = useState<LoadState>('loading');
@@ -131,8 +128,7 @@ export function ForumHome({ boardSlug }: { boardSlug?: string }) {
   const continueEntry = historyData.entries[0];
 
   const trendingTags = useMemo(() => Array.from(new Set(forum.posts.flatMap((post) => post.tags))).slice(0, 5), [forum.posts]);
-  console.error('FH-AFTER-DERIVED');
-
+  
   return (
     <ForumShell
       right={
