@@ -1,0 +1,14 @@
+# Docker 构建上下文排除（构建/运行阶段所需文件已在 Dockerfile 内处理）
+node_modules
+.next
+.vinext
+.wrangler
+dist
+out
+coverage
+.git
+.DS_Store
+*.log
+.env
+.env.*
+!.env.example

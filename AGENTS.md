@@ -1,0 +1,87 @@
+# AGENTS.md
+
+面向在此仓库工作的 AI/人类开发者的工程指南。产品需求以 [docs/PRD.md](docs/PRD.md) 为准。
+
+## 项目是什么
+
+匿名社区论坛「无名岛」（代号 Incognito）。核心技术：vinext（Vite + React Server Components 的 Next.js 兼容层）+ Cloudflare Workers（本地 Miniflare D1/SQLite）。
+
+匿名语义（务必先理解再动手）：
+
+- **假名化**：每个浏览器首次访问自动获得随机匿名账号（`anonymous_users`），服务端不存邮箱/手机/姓名/IP/UA。
+- **线程内代号**：同一帖子内同一账号显示固定「匿名 A1/A2…」，楼主显示「楼主」；代号来自 `thread_aliases`，跨帖子不可直接关联。公开 DTO 永不返回内部 `user_id`。
+- 内容删除是**软删除**（`status='deleted'`、清空标题/正文、楼层号不重排）；销毁身份 = 撤销全部会话 + 删历史/投票（并回滚目标计数）+ 内容转占位。
+
+## 常用命令
+
+```bash
+npm run dev          # 本地开发 http://localhost:3000（首次请求自动写种子数据）
+npm run build        # 生产构建 → dist/
+npm start            # wrangler 本地运行 dist/ 产物
+npm run lint         # oxlint（提交前必须 0 error）
+npm run format       # oxfmt
+npm run db:generate  # 修改 db/schema.ts 后生成迁移（drizzle/000N_*.sql）
+npx tsc --noEmit     # 类型检查（提交前必须通过）
+```
+
+注意：`components/ui/*` 存在 19 条脚手架遗留 lint error（chart/button-group 等），**不要改动这些文件**；自己写的代码必须 lint/tsc 干净。
+
+## 分层与依赖方向
+
+```text
+app/(pages)              # 页面：服务端页面文件只负责 metadata + 包一层 ForumShell
+app/api/v1/**            # Route Handlers：鉴权会话 → zod 校验 → service → jsonError
+server/forum/service.ts  # 领域服务（唯一读写 D1 的地方，除 auth）
+server/auth/anonymous.ts # 匿名会话（cookie、token 哈希、撤销）
+server/http.ts           # 响应信封 {data, error} 与稳定错误码表
+components/forum/*       # 全部客户端组件；新页面复用 ForumShell / AnnouncementStrip
+lib/*                    # 客户端可用的共享代码（类型、apiJson、常量）
+db/schema.ts + drizzle/  # schema 与迁移（仅 SQLite/D1 方言）
+```
+
+规则：
+
+- **客户端组件禁止 import `server/*`**；前后端共享常量/类型放 `lib/`（如 `lib/report-reasons.ts`、`lib/forum-types.ts`）。
+- 页面结构：`app/xxx/page.tsx`（server，可 export metadata）→ `<ForumShell><XXView/></ForumShell>`；视图组件放 `components/forum/`。
+- 请求一律走 `lib/api.ts` 的 `apiJson`（统一错误抛 `ApiError`，已带 credentials）。
+- 读接口由 Server Components 直连领域服务也可，但现有页面均为客户端 fetch，保持风格一致优先。
+
+## API 约定
+
+- 响应信封：`{ data, error: { code, message } | null }`；错误只返回稳定错误码 + 安全文案。
+- 新错误码：在 `server/http.ts` 的 `safeErrors` 注册；**不得**向前端泄漏内部 ID、堆栈、风控细节。
+- 所有写路由：`ensureAnonymousSession(request)` 取 userId → `schemas.ts` zod parse → service → `applySessionCookie`（新会话需回写 Set-Cookie）。
+- 用户状态守卫：service 内 `assertWritableUser`（read_only/suspended 不能发言、不能投票）。
+- 时间一律 epoch 毫秒（UTC），展示层再格式化。
+
+## 必须守住的业务规则（改代码前对照）
+
+- 编辑时限：作者发布后 **30 分钟**内可编辑（服务端校验 `EDIT_WINDOW_EXPIRED`），删除不限时。
+- 投票：一人一票靠 `votes(user_id, target_type, target_id)` 唯一约束；不能投自己；三态 none/up/down。
+- 已读进度：`browsing_history` 每用户每帖一条；合并必须 `MAX(旧,新)` 单调；锚点取 `floor-{publicId}` 元素 id。
+- 楼层号：由 `posts.next_floor_no` 分配，删除不重排；唯一约束 `(post_id, floor_no)`。
+- 举报：同一账号对同一目标仅一条（唯一约束 → `REPORT_EXISTS`），不能举报自己。
+- 隐私边界：日志/响应/审计不得出现 IP、UA、邮箱等；搜索词不进日志。
+- 只读/归档板块与锁定帖子：禁止新内容（`BOARD_READONLY` / `POST_LOCKED`），仍可浏览。
+
+## Schema 变更流程
+
+1. 改 `db/schema.ts`（保持 SQLite 方言与既有风格：text 主键、integer 时间戳）。
+2. `npm run db:generate` → 人工审查 `drizzle/000N_*.sql`。
+3. 应用到本地 D1：`npx wrangler d1 execute DB --local --file=drizzle/000N_xxx.sql`
+   （备选：直接 `sqlite3 .wrangler/state/v3/d1/miniflare-D1DatabaseObject/*.sqlite`，服务器运行中 WAL 也允许。）
+4. 提示使用者：线上生产 D1 需执行同一文件。
+
+## 测试现状
+
+暂无自动化测试框架。验证手段：
+
+- `npx tsc --noEmit` + `npm run lint`
+- 本地 dev server + curl 冒烟：会话 cookie jar → 发帖 → 回帖/引用 → 投票切换 → 进度 PUT/GET → 搜索 → 编辑/删除（30 分钟窗内）→ 举报去重 → 同步开关 → 销毁身份
+- 页面验证：http://localhost:3000 全页面走查（桌面 + 390px 移动端），注意无横向溢出、移动底栏四入口。
+
+PRD 第 18 节列出了上线前应补齐的 Vitest/Playwright 与三库矩阵测试，属已知缺口。
+
+## 已知缺口（不要误以为已实现）
+
+管理后台 `/admin/*`、图片/头像/表情上传（R2）、恢复短语与 Passkey、列表分页（帖子页上限 200 楼层/列表 50）。实现前先读 PRD 对应条目与「23 节业务参数」。

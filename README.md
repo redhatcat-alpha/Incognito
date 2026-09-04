@@ -1,0 +1,103 @@
+# 无名岛（Incognito）
+
+> 匿名社区论坛 · 产品代号 Incognito
+> 首发形态：响应式 Web（Cloudflare Workers + D1）
+> 产品文档：[docs/PRD.md](docs/PRD.md)
+
+「无名岛」是一个不需要手机号或邮箱即可使用的匿名讨论社区：访客首次打开即获得随机匿名身份，可发帖、回帖、点赞、举报；同一帖子内身份稳定可辨（楼主 / 匿名 A1、A2…），跨帖子不暴露固定身份；阅读位置自动保存，下次打开可一键续读。
+
+匿名是假名化而非密码学匿名：浏览历史、投票与内容归属挂在服务端随机账号上，以便续读与治理；用户可以随时查看、关闭同步、清空或彻底销毁身份。
+
+## ✨ 已实现功能（PRD P0 用户端）
+
+- **匿名身份与会话**：首次访问自动创建；HttpOnly + SameSite=Lax 会话令牌（库中仅存哈希）；会话列表与撤销、退出当前设备、销毁身份（撤销全部会话、清除历史与投票、公开内容转删除占位并回滚投票计数）
+- **板块与帖子**：全部板块目录 `/boards`、板块页 `/b/[slug]`（只读/归档态提示）、首页（最新/热门/未读）；发帖（标题 4–120 字、正文 20k、0–5 个标签）
+- **帖子详情** `/t/[id]`：主帖与楼层时间线（首帖 1 楼）、楼主/层主标识、引用楼层、30 分钟内编辑、删除保留楼层占位不重排、举报、分享
+- **投票**：点赞/点踩/取消/切换状态机，数据库唯一约束一人一票，不能投自己；乐观更新 + 服务端回写
+- **阅读续接**：楼层锚点定位与高亮、「上次看到 N 楼 · 继续阅读」；IntersectionObserver 计算已读楼层，5 秒防抖 + 页面隐藏补发；单调合并，锚点被删自动回退
+- **浏览历史** `/history`：最近阅读、进度条、未读提醒、单条删除与清空；可在隐私设置中关闭云端同步（关闭即清除服务端历史）
+- **搜索** `/search`：标题与正文检索，板块/标签筛选，结果高亮
+- **隐私与设置**：`/settings/profile`（匿名身份、设备会话、退出）、`/settings/privacy`（历史同步开关、清空历史、销毁身份、数据类别说明）
+- **治理**：举报（七类原因、去重、防自举）、删除即占位、帖子/板块只读与锁定语义、公告展示（可关闭/紧急不可关）
+- 匿名数据边界：不收集邮箱/手机号/姓名/IP/完整 UA/浏览器指纹；公开 API 永不返回内部账号 ID
+
+## 🚀 本地开发
+
+要求 Node.js ≥ 22.13。
+
+```bash
+npm install
+npm run dev        # http://localhost:3000（首次访问自动写入种子板块/帖子）
+```
+
+常用命令：
+
+| 命令 | 说明 |
+| --- | --- |
+| `npm run dev` | 本地开发（vinext + 本地 D1） |
+| `npm run build` | 生产构建，产物输出到 `dist/` |
+| `npm start` | 用 wrangler 以本地 workerd 运行 `dist/` 产物 |
+| `npm run lint` / `npm run format` | oxlint / oxfmt |
+| `npm run db:generate` | drizzle-kit 生成迁移（`drizzle/*.sql`） |
+
+数据保存在本地 Miniflare D1（`.wrangler/state/`），属于本地文件，不入库。
+
+### 数据库迁移
+
+```bash
+npm run db:generate                      # 修改 db/schema.ts 后生成迁移
+# 本地 D1 应用迁移（示例）：
+npx wrangler d1 execute DB --local --file=drizzle/0001_xxx.sql
+```
+
+## 🐳 容器预览（本地/自托管）
+
+项目面向 Cloudflare Workers 部署；`deploy/` 提供容器化的本地预览方式（workerd + 本地 D1），方便在无 Cloudflare 账号的环境里体验：
+
+```bash
+docker compose -f deploy/docker-compose.yaml up --build
+# 打开 http://localhost:3000
+```
+
+数据目录挂载在匿名卷 `.wrangler`（Miniflare D1 状态），重建容器不丢数据。
+
+## ☁️ 部署到 Cloudflare
+
+1. 准备 Cloudflare 账号与 D1 数据库：`wrangler d1 create incognito-db`
+2. 将 `.openai/hosting.json` 中的 `d1`（当前 `DB`）指向真实数据库 ID；如需图片上传另配 R2（`FILES`）
+3. 对线上 D1 执行迁移（`drizzle/0000_*.sql`、`drizzle/0001_*.sql`）
+4. 构建并部署（vinext / wrangler 会使用托管配置）
+
+> 注意：SQLite/D1 单实例适用于个人站与低流量；PRD 建议公共高并发部署使用 PostgreSQL/MySQL，仓库当前为 D1 方言（`db/schema.ts`），切换数据库属离线迁移，需另行引入方言层。
+
+## 🗂 项目结构
+
+```text
+app/                    # Next.js App Router 页面与 /api/v1 路由
+  api/v1/               # REST：posts/replies/votes/history/search/reports/announcements/boards/anon/*
+  b/[slug] · t/[id] · boards · history · search · settings/* · rules
+components/forum/       # 论坛 UI：壳层、首页、帖子详情、历史、搜索、设置等
+components/ui/          # shadcn/base-ui 组件（脚手架）
+db/                     # D1 schema 与连接
+drizzle/                # 生成的迁移 SQL
+server/
+  auth/anonymous.ts     # 匿名会话（token 哈希、cookie、撤销）
+  forum/service.ts      # 领域服务（论坛/投票/历史/搜索/举报/身份）
+  forum/schemas.ts      # zod 校验（前后端共享常量见 lib/）
+  forum/seed.ts         # 种子数据
+  http.ts               # 响应信封与稳定错误码
+lib/                    # 客户端 API、类型、格式化、共享常量
+docs/PRD.md             # 产品需求文档 v1.0
+deploy/                 # 容器化本地预览（Dockerfile / compose）
+```
+
+## 🧭 剩余路线（对照 PRD P0 缺口）
+
+- 管理后台 `/admin/*`：站点设置、板块/标签/表情管理、举报队列、内容治理与审计（需独立管理员认证）
+- 图片/头像/表情包上传管线（R2 + EXIF 剥离 + 缩略图）
+- 恢复短语与 Passkey 跨设备恢复（ANON-002）
+- 楼层/帖子分页（当前单页上限 200/50）
+
+## 📜 许可与说明
+
+代码与文档供学习与自托管使用。上线前请阅读 [docs/PRD.md](docs/PRD.md) 第 23 节：需由运营与合规确认服务地区法律、内容政策、删除周期等业务参数，方可宣称合规。
