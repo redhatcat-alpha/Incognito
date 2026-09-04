@@ -97,7 +97,7 @@ export function RichEditor({ id, value, onChange, placeholder, maxLength, minHei
   ];
 
   return (
-    <div className="relative overflow-hidden rounded-xl border border-black/15 bg-white focus-within:ring-2 focus-within:ring-[var(--signal)]">
+    <div className="rounded-xl border border-black/15 bg-white focus-within:ring-2 focus-within:ring-[var(--signal)]">
       <div className="flex flex-wrap items-center gap-0.5 border-b border-[var(--line)] bg-[#fbfcf9] px-2 py-1.5">
         {mode === 'write'
           ? buttons.map((item) => (
@@ -151,22 +151,17 @@ export function RichEditor({ id, value, onChange, placeholder, maxLength, minHei
         </div>
       </div>
       {mode === 'write' && emojiOpen ? (
-        <div
-          aria-label="百度贴吧表情包"
-          className="absolute inset-x-0 top-full z-20 max-h-64 overflow-y-auto border-t border-[var(--line)] bg-white p-2 shadow-[0_12px_32px_rgb(17_24_21/0.14)]"
-        >
-          <div className="grid grid-cols-8 gap-1">
-            {tiebaEmojis.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => insertEmoji(item.id)}
-                className="grid size-9 place-items-center rounded-lg hover:bg-[var(--ink)]/[0.06]"
-              >
-                <Image src={item.src} alt={item.alt} width={24} height={24} unoptimized className="size-6 object-contain" />
-              </button>
-            ))}
-          </div>
+        <div className="grid max-h-56 grid-cols-8 gap-1 overflow-y-auto border-b border-[var(--line)] bg-[#fbfcf9] p-2">
+          {tiebaEmojis.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => insertEmoji(item.id)}
+              className="grid size-9 place-items-center rounded-lg hover:bg-[var(--ink)]/[0.06]"
+            >
+              <Image src={item.src} alt={item.alt} width={24} height={24} unoptimized className="size-6 object-contain" />
+            </button>
+          ))}
         </div>
       ) : null}
       {mode === 'write' ? (
