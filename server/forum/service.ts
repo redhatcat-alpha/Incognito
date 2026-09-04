@@ -124,6 +124,20 @@ export type PublicAnnouncement = {
   startsAt: number;
   endsAt: number | null;
   createdAt: number;
+  read: boolean;
+};
+
+export type AdminAnnouncementRow = {
+  id: string;
+  scope: string;
+  level: string;
+  title: string;
+  body: string;
+  startsAt: number;
+  endsAt: number | null;
+  status: string;
+  createdAt: number;
+  readCount: number;
 };
 
 export type AnonSessionInfo = {
@@ -900,7 +914,7 @@ export async function searchPosts(
   };
 }
 
-export async function listAnnouncements(boardSlug?: string) {
+export async function listAnnouncements(boardSlug?: string, userId?: string) {
   await ensureSeedData();
   const db = getD1();
   const params: unknown[] = [Date.now(), Date.now()];
@@ -910,8 +924,15 @@ export async function listAnnouncements(boardSlug?: string) {
     params.push(boardSlug);
   }
   const result = await db
-    .prepare(`SELECT a.id, a.scope, a.level, a.title, a.body, a.starts_at, a.ends_at, a.created_at FROM announcements a ${scopeSql} ORDER BY a.created_at DESC LIMIT 10`)
-    .bind(...params)
+    .prepare(
+      `SELECT a.id, a.scope, a.level, a.title, a.body, a.starts_at, a.ends_at, a.created_at,
+              CASE WHEN d.id IS NULL THEN 0 ELSE 1 END AS is_read
+       FROM announcements a
+       LEFT JOIN announcement_dismissals d ON d.announcement_id = a.id AND d.user_id = ?
+       ${scopeSql}
+       ORDER BY a.created_at DESC LIMIT 10`,
+    )
+    .bind(userId ?? '__none__', ...params)
     .all<{
       id: string;
       scope: string;
@@ -921,6 +942,7 @@ export async function listAnnouncements(boardSlug?: string) {
       starts_at: number;
       ends_at: number | null;
       created_at: number;
+      is_read: number;
     }>();
   return result.results.map<PublicAnnouncement>((row) => ({
     id: row.id,
@@ -931,7 +953,86 @@ export async function listAnnouncements(boardSlug?: string) {
     startsAt: row.starts_at,
     endsAt: row.ends_at,
     createdAt: row.created_at,
+    read: row.is_read === 1,
   }));
+}
+
+export async function markAnnouncementRead(userId: string, announcementId: string) {
+  const db = getD1();
+  await db
+    .prepare(
+      `INSERT OR IGNORE INTO announcement_dismissals (id, announcement_id, user_id, dismissed_at)
+       VALUES (?, ?, ?, ?)`,
+    )
+    .bind(crypto.randomUUID(), announcementId, userId, Date.now())
+    .run();
+  return { read: true };
+}
+
+/** 管理端：发布公告（默认立即开始，可设置结束时间）。 */
+export async function createAnnouncement(input: {
+  title: string;
+  body: string;
+  level: 'info' | 'reminder' | 'warning' | 'urgent';
+  endsAt: number | null;
+}) {
+  const db = getD1();
+  const id = crypto.randomUUID();
+  const now = Date.now();
+  await db
+    .prepare(
+      `INSERT INTO announcements (id, scope, level, title, body, starts_at, ends_at, status, created_at)
+       VALUES (?, 'global', ?, ?, ?, ?, ?, 'published', ?)`,
+    )
+    .bind(id, input.level, input.title, input.body, now, input.endsAt, now)
+    .run();
+  return { id, level: input.level, title: input.title, body: input.body, startsAt: now, endsAt: input.endsAt, status: 'published' };
+}
+
+/** 管理端：全部公告与各自已读人数。 */
+export async function listAllAnnouncements(): Promise<AdminAnnouncementRow[]> {
+  const result = await getD1()
+    .prepare(
+      `SELECT a.id, a.scope, a.level, a.title, a.body, a.starts_at, a.ends_at, a.status, a.created_at,
+              (SELECT COUNT(*) FROM announcement_dismissals d WHERE d.announcement_id = a.id) AS read_count
+       FROM announcements a
+       ORDER BY a.created_at DESC
+       LIMIT 100`,
+    )
+    .all<{
+      id: string;
+      scope: string;
+      level: string;
+      title: string;
+      body: string;
+      starts_at: number;
+      ends_at: number | null;
+      status: string;
+      created_at: number;
+      read_count: number;
+    }>();
+  return result.results.map((row) => ({
+    id: row.id,
+    scope: row.scope,
+    level: row.level,
+    title: row.title,
+    body: row.body,
+    startsAt: row.starts_at,
+    endsAt: row.ends_at,
+    status: row.status,
+    createdAt: row.created_at,
+    readCount: Number(row.read_count),
+  }));
+}
+
+/** 管理端：下架公告（新读者不再看到，历史已读保留）。 */
+export async function archiveAnnouncement(announcementId: string) {
+  const result = await getD1()
+    .prepare("UPDATE announcements SET status = 'archived' WHERE id = ? AND status = 'published'")
+    .bind(announcementId)
+    .run();
+  if (result.meta.changes === 0) throw new Error('POST_NOT_FOUND');
+  return { archived: true };
 }
 
 export async function createReport(

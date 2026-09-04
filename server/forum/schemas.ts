@@ -63,6 +63,13 @@ export const registerSchema = z.object({
   password: z.string().min(8, '密码至少 8 位').max(72, '密码最多 72 位'),
 });
 
+export const adminAnnouncementSchema = z.object({
+  title: z.string().trim().min(1, '公告标题不能为空').max(120),
+  body: z.string().trim().min(1, '公告正文不能为空').max(5000),
+  level: z.enum(['info', 'reminder', 'warning', 'urgent']).default('info'),
+  endsAt: z.number().int().nullable().optional(),
+});
+
 export const loginSchema = z.object({
   username: usernameSchema,
   password: z.string().min(1, '请输入密码').max(72),

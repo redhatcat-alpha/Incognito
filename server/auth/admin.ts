@@ -112,6 +112,14 @@ export async function getAdminUser(request: Request): Promise<AdminUser | null> 
   return { id: row.id, username: row.username, role: row.role, status: row.status, createdAt: row.created_at };
 }
 
+/** 管理门槛：需要有效管理员会话（role: admin / super_admin）。 */
+export async function requireAdminUser(request: Request): Promise<AdminUser> {
+  const user = await getAdminUser(request);
+  if (!user) throw new Error('AUTH_REQUIRED');
+  if (user.status !== 'active') throw new Error('ACCOUNT_SUSPENDED');
+  return user;
+}
+
 export async function logoutAdmin(request: Request): Promise<boolean> {
   const token = readCookie(request, COOKIE_NAME);
   if (!token) return false;

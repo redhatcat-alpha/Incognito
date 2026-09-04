@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { AnnouncementStrip, ForumShell } from '@/components/forum/forum-shell';
+import { ForumShell } from '@/components/forum/forum-shell';
 import { NewPostDialog, createPostRequest } from '@/components/forum/new-post-dialog';
 import { PostList } from '@/components/forum/post-list';
 import { apiJson } from '@/lib/api';
@@ -207,8 +207,6 @@ export function ForumHome({ boardSlug }: { boardSlug?: string }) {
 
         {!boardMissing ? (
           <>
-        {selectedBoard ? <AnnouncementStrip boardSlug={boardSlug} /> : <AnnouncementStrip />}
-
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="min-w-0">
             <p className="mb-1 flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--signal-dark)]">

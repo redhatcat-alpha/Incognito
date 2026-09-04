@@ -17,7 +17,6 @@ import {
   History,
   Home,
   Lightbulb,
-  Megaphone,
   MessageCircle,
   Music,
   PawPrint,
@@ -25,7 +24,6 @@ import {
   Settings,
   Sparkles,
   UserRound,
-  X,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -41,6 +39,7 @@ import {
 } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiJson } from '@/lib/api';
+import { absoluteTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { Announcement, BoardSummary } from '@/lib/forum-types';
 
@@ -103,76 +102,6 @@ const levelStyle: Record<Announcement['level'], string> = {
   reminder: 'border-sky-500/30 bg-sky-100 text-sky-950',
   info: 'border-[var(--line)] bg-white text-[var(--foreground)]',
 };
-
-export function AnnouncementStrip({ boardSlug }: { boardSlug?: string }) {
-  const [items, setItems] = useState<Announcement[]>([]);
-  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
-  const storageKey = 'incognito:dismissed-notices';
-
-  useEffect(() => {
-    let cancelled = false;
-    apiJson<Announcement[]>(`/api/v1/announcements${boardSlug ? `?board=${encodeURIComponent(boardSlug)}` : ''}`)
-      .then((data) => {
-        if (!cancelled) setItems(data);
-      })
-      .catch(() => undefined);
-    const timer = window.setTimeout(() => {
-      try {
-        const raw = window.localStorage.getItem(storageKey);
-        if (raw) setDismissed(new Set(JSON.parse(raw) as string[]));
-      } catch {
-        // 忽略本地存储异常
-      }
-    }, 0);
-    return () => {
-      window.clearTimeout(timer);
-      cancelled = true;
-    };
-  }, [boardSlug]);
-
-  const dismiss = (id: string) => {
-    const next = new Set(dismissed);
-    next.add(id);
-    setDismissed(next);
-    try {
-      window.localStorage.setItem(storageKey, JSON.stringify(Array.from(next)));
-    } catch {
-      // 忽略本地存储异常
-    }
-  };
-
-  const visible = items.filter((item) => item.level !== 'urgent' && !dismissed.has(item.id));
-  const urgent = items.filter((item) => item.level === 'urgent');
-  if (!visible.length && !urgent.length) return null;
-
-  const Row = ({ item }: { item: Announcement }) => (
-    <div className={cn('flex items-start gap-3 rounded-2xl border px-4 py-3', levelStyle[item.level])}>
-      <Megaphone className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-      <div className="min-w-0 text-sm leading-5">
-        <span className="font-bold">{item.title}</span>
-        {item.body ? <span className="opacity-80"> · {item.body}</span> : null}
-      </div>
-      {item.level !== 'urgent' ? (
-        <Button
-          variant="ghost"
-          size="icon"
-          className={cn('-mr-1 -mt-1 ml-auto size-7 shrink-0 rounded-full', item.level === 'info' ? 'hover:bg-[var(--ink)]/[0.06]' : 'hover:bg-black/10')}
-          onClick={() => dismiss(item.id)}
-          aria-label="关闭这条公告"
-        >
-          <X className="size-3.5" />
-        </Button>
-      ) : null}
-    </div>
-  );
-
-  return (
-    <div className="space-y-2">
-      {visible.map((item) => <Row key={item.id} item={item} />)}
-      {urgent.map((item) => <Row key={item.id} item={item} />)}
-    </div>
-  );
-}
 
 export function ForumShell({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
   const pathname = usePathname();
@@ -364,7 +293,86 @@ export function ForumShell({ children, right }: { children: React.ReactNode; rig
           <UserRound />我的
         </Link>
       </nav>
+      <AnnouncementModal />
     </div>
+  );
+}
+function AnnouncementModal() {
+  const [queue, setQueue] = useState<Announcement[] | null>(null);
+  const [index, setIndex] = useState(0);
+  const [open, setOpen] = useState(false);
+  const [later, setLater] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      apiJson<Announcement[]>('/api/v1/announcements')
+        .then((items) => {
+          if (cancelled) return;
+          const unread = items.filter((item) => !item.read);
+          setQueue(unread);
+          if (unread.length > 0) setOpen(true);
+        })
+        .catch(() => undefined);
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, []);
+
+  const current = queue && queue.length > 0 ? queue[Math.min(index, queue.length - 1)] : null;
+
+  const markRead = async () => {
+    if (!current) return;
+    try {
+      await apiJson(`/api/v1/announcements/${encodeURIComponent(current.id)}/read`, { method: 'PUT' });
+    } catch {
+      // 标记失败不阻塞浏览
+    }
+    setQueue((items) => {
+      const next = (items ?? []).filter((item) => item.id !== current.id);
+      if (next.length === 0) {
+        setOpen(false);
+      } else {
+        setIndex(0);
+        setOpen(true);
+      }
+      return next;
+    });
+  };
+
+  return (
+    <Dialog open={open && !later} onOpenChange={(next) => { setOpen(next); if (!next) setLater(true); }}>
+      <DialogContent className="border border-black/10 bg-[#f8faf6] p-6 sm:max-w-lg">
+        {current ? (
+          <>
+            <div className="flex items-center gap-2">
+              <span
+                className={cn(
+                  'size-2 rounded-full',
+                  current.level === 'urgent' ? 'bg-[#d83b2d]' : current.level === 'warning' ? 'bg-amber-500' : 'bg-emerald-500',
+                )}
+              />
+              <Badge className="h-5 rounded-full px-2 text-[10px] font-bold uppercase tracking-wider" variant="outline">
+                {current.level === 'urgent' ? '紧急' : current.level === 'warning' ? '提醒' : current.level === 'reminder' ? '提示' : '公告'}
+              </Badge>
+            </div>
+            <h2 className="mt-3 text-xl font-black tracking-tight">{current.title}</h2>
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{current.body}</p>
+            <p className="mt-3 text-xs text-muted-foreground">{absoluteTime(current.createdAt)}</p>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <Button variant="ghost" className="rounded-full text-muted-foreground" onClick={() => setLater(true)}>
+                稍后再说
+              </Button>
+              <Button className="rounded-full bg-[var(--ink)] text-white hover:bg-[var(--ink-soft)]" onClick={() => void markRead()}>
+                我知道了，不再显示
+              </Button>
+            </div>
+          </>
+        ) : null}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -377,6 +385,16 @@ function AnnouncementBell() {
       .then(setItems)
       .catch(() => setItems([]));
   }, []);
+
+  const markRead = async (id: string) => {
+    try {
+      await apiJson(`/api/v1/announcements/${encodeURIComponent(id)}/read`, { method: 'PUT' });
+      setItems((current) => (current ?? []).map((item) => (item.id === id ? { ...item, read: true } : item)));
+    } catch {
+      // 忽略标记失败
+    }
+  };
+
   return (
     <Dialog
       open={open}
@@ -393,7 +411,7 @@ function AnnouncementBell() {
       <DialogContent className="border border-black/10 bg-[#f8faf6] p-6 sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="text-xl font-black tracking-tight">站内公告</DialogTitle>
-          <DialogDescription>管理员发布的全站通知，紧急公告无法关闭。</DialogDescription>
+          <DialogDescription>公告会以弹窗提醒未读内容；点击「标为已读」后不再弹窗。</DialogDescription>
         </DialogHeader>
         <div className="grid max-h-[60vh] gap-3 overflow-y-auto py-2">
           {items === null ? (
@@ -402,16 +420,32 @@ function AnnouncementBell() {
               <Skeleton className="h-16 w-full rounded-xl" />
             </div>
           ) : null}
-          {items && items.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">暂时没有公告</p> : null}
+          {items && items.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">暂时没有公告</p>
+          ) : null}
           {items?.map((item) => (
-            <div key={item.id} className={cn('rounded-xl border p-4', levelStyle[item.level])}>
+            <div key={item.id} className={cn('rounded-xl border p-4', item.read ? 'border-black/5 bg-white/60' : levelStyle[item.level])}>
               <div className="flex items-center gap-2">
                 <Badge className="h-5 rounded-full px-2 text-[10px] font-bold uppercase tracking-wider" variant="outline">
                   {item.level === 'urgent' ? '紧急' : item.level === 'warning' ? '提醒' : item.level === 'reminder' ? '提示' : '公告'}
                 </Badge>
                 <p className="text-sm font-black">{item.title}</p>
+                <div className="ml-auto flex shrink-0 items-center gap-2">
+                  {item.read ? (
+                    <span className="text-xs font-bold text-muted-foreground">已读</span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => void markRead(item.id)}
+                      className="rounded-full bg-[var(--ink)] px-3 py-1 text-xs font-bold text-white hover:bg-[var(--ink-soft)]"
+                    >
+                      标为已读
+                    </button>
+                  )}
+                </div>
               </div>
               <p className="mt-1.5 text-sm leading-6 opacity-90">{item.body}</p>
+              <p className="mt-1 text-[11px] opacity-60">{absoluteTime(item.createdAt)}</p>
             </div>
           ))}
         </div>

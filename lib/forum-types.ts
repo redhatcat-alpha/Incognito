@@ -81,6 +81,20 @@ export type Announcement = {
   startsAt: number;
   endsAt: number | null;
   createdAt: number;
+  read: boolean;
+};
+
+export type AdminAnnouncement = {
+  id: string;
+  scope: string;
+  level: string;
+  title: string;
+  body: string;
+  startsAt: number;
+  endsAt: number | null;
+  status: string;
+  createdAt: number;
+  readCount: number;
 };
 
 export type AuthMe = {

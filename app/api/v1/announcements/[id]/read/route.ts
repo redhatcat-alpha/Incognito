@@ -2,15 +2,15 @@ import { NextResponse } from 'next/server';
 
 import { applySessionCookie, ensureAnonymousSession } from '@/server/auth/anonymous';
 import { requireRegisteredUser } from '@/server/auth/registered';
-import { listAnnouncements } from '@/server/forum/service';
+import { markAnnouncementRead } from '@/server/forum/service';
 import { jsonError } from '@/server/http';
 
-export async function GET(request: Request) {
+export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const account = await requireRegisteredUser(request);
     const session = await ensureAnonymousSession(request);
-    const boardSlug = new URL(request.url).searchParams.get('board') ?? undefined;
-    const data = await listAnnouncements(boardSlug || undefined, account.id);
+    const { id } = await context.params;
+    const data = await markAnnouncementRead(account.id, id);
     return applySessionCookie(NextResponse.json({ data, error: null }), session);
   } catch (error) {
     return jsonError(error);

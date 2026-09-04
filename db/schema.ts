@@ -271,3 +271,18 @@ export const adminSessions = sqliteTable(
     index('idx_admin_sessions_user_id').on(table.userId),
   ],
 );
+
+/** 公告“已读”状态（按注册用户记录，跨设备生效；keyed by registered user id）。 */
+export const announcementDismissals = sqliteTable(
+  'announcement_dismissals',
+  {
+    id: text('id').primaryKey(),
+    announcementId: text('announcement_id').notNull().references(() => announcements.id),
+    userId: text('user_id').notNull().references(() => registeredUsers.id),
+    dismissedAt: integer('dismissed_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('uq_announcement_dismissals').on(table.announcementId, table.userId),
+    index('idx_announcement_dismissals_user').on(table.userId, table.dismissedAt),
+  ],
+);
