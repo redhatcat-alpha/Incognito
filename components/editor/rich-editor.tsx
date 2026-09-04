@@ -1,10 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { Bold, Code, Eye, Italic, Link2, PenLine, Quote } from 'lucide-react';
+import Image from 'next/image';
+import { Bold, Code, Eye, Italic, Link2, PenLine, Quote, Smile } from 'lucide-react';
 
 import { Markdown } from '@/components/forum/markdown';
 import { cn } from '@/lib/utils';
+import { emojiToken, tiebaEmojis } from '@/lib/tieba-emojis';
 
 type RichEditorProps = {
   id: string;
@@ -25,6 +27,7 @@ function textareaOf(id: string): HTMLTextAreaElement | null {
  */
 export function RichEditor({ id, value, onChange, placeholder, maxLength, minHeightClass }: RichEditorProps) {
   const [mode, setMode] = useState<'write' | 'preview'>('write');
+  const [emojiOpen, setEmojiOpen] = useState(false);
 
   function apply(next: string, start: number, end: number) {
     onChange(next);
@@ -68,6 +71,16 @@ export function RichEditor({ id, value, onChange, placeholder, maxLength, minHei
     apply(value.slice(0, start) + prefixed + value.slice(end), start, start + prefixed.length);
   }
 
+  function insertEmoji(emojiId: number) {
+    const el = textareaOf(id);
+    if (!el) return;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const token = emojiToken(emojiId);
+    apply(value.slice(0, start) + token + value.slice(end), start + token.length, start + token.length);
+    setEmojiOpen(false);
+  }
+
   function wrapLink() {
     const url = window.prompt('链接地址（以 http:// 或 https:// 开头）：');
     if (!url || !/^https?:\/\//i.test(url.trim())) return;
@@ -84,7 +97,7 @@ export function RichEditor({ id, value, onChange, placeholder, maxLength, minHei
   ];
 
   return (
-    <div className="overflow-hidden rounded-xl border border-black/15 bg-white focus-within:ring-2 focus-within:ring-[var(--signal)]">
+    <div className="relative overflow-hidden rounded-xl border border-black/15 bg-white focus-within:ring-2 focus-within:ring-[var(--signal)]">
       <div className="flex flex-wrap items-center gap-0.5 border-b border-[var(--line)] bg-[#fbfcf9] px-2 py-1.5">
         {mode === 'write'
           ? buttons.map((item) => (
@@ -100,6 +113,18 @@ export function RichEditor({ id, value, onChange, placeholder, maxLength, minHei
               </button>
             ))
           : null}
+        <button
+          type="button"
+          aria-label="表情包"
+          aria-expanded={emojiOpen}
+          onClick={() => { if (mode === 'preview') setMode('write'); setEmojiOpen((v) => !v); }}
+          className={cn(
+            'grid size-8 place-items-center rounded-lg transition-colors',
+            emojiOpen ? 'bg-[var(--ink)] text-white' : 'text-muted-foreground hover:bg-[var(--ink)]/[0.06] hover:text-foreground',
+          )}
+        >
+          <Smile className="size-4" />
+        </button>
         <div className="ml-auto flex items-center gap-0.5">
           <button
             type="button"
@@ -125,6 +150,25 @@ export function RichEditor({ id, value, onChange, placeholder, maxLength, minHei
           </button>
         </div>
       </div>
+      {mode === 'write' && emojiOpen ? (
+        <div
+          aria-label="百度贴吧表情包"
+          className="absolute inset-x-0 top-full z-20 max-h-64 overflow-y-auto border-t border-[var(--line)] bg-white p-2 shadow-[0_12px_32px_rgb(17_24_21/0.14)]"
+        >
+          <div className="grid grid-cols-8 gap-1">
+            {tiebaEmojis.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => insertEmoji(item.id)}
+                className="grid size-9 place-items-center rounded-lg hover:bg-[var(--ink)]/[0.06]"
+              >
+                <Image src={item.src} alt={item.alt} width={24} height={24} unoptimized className="size-6 object-contain" />
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
       {mode === 'write' ? (
         <textarea
           id={id}

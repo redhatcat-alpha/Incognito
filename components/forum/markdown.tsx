@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import { Fragment, type ReactNode } from 'react';
 
 /** 受限 Markdown：转义全部 HTML 后仅渲染白名单语法。 */
@@ -10,7 +11,7 @@ function escapeHtml(input: string): string {
 }
 
 const INLINE_PATTERN =
-  /(\*\*(.+?)\*\*)|(`([^`\n]+)`)|(\|\|(.+?)\|\|)|(\bhttps?:\/\/[^\s<"']+)/g;
+  /(!\[([^\]]*)\]\(\s*(\/emoji\/tieba\/[^)\s]+)\s*\))|(\*\*(.+?)\*\*)|(`([^`\n]+)`)|(\|\|(.+?)\|\|)|(\bhttps?:\/\/[^\s<"']+)/g;
 
 function inlineToNodes(text: string, keyBase: string): ReactNode[] {
   const nodes: ReactNode[] = [];
@@ -20,10 +21,23 @@ function inlineToNodes(text: string, keyBase: string): ReactNode[] {
   for (const match of source.matchAll(INLINE_PATTERN)) {
     const start = match.index ?? 0;
     if (start > cursor) nodes.push(<Fragment key={`${keyBase}-t${index}`}>{source.slice(cursor, start)}</Fragment>);
-    const [full, , bold, , code, , spoiler, link] = match;
+    const [full, , alt, emojiSrc, , bold, , code, , spoiler, link] = match;
     index += 1;
     const key = `${keyBase}-m${index}`;
-    if (bold) {
+    if (emojiSrc) {
+      nodes.push(
+        <Image
+          key={key}
+          src={emojiSrc}
+          alt={alt || '贴吧表情'}
+          title={alt || '贴吧表情'}
+          width={22}
+          height={22}
+          unoptimized
+          className="inline-block h-[22px] w-auto rounded-sm align-[-4px]"
+        />,
+      );
+    } else if (bold) {
       nodes.push(<strong key={key} className="font-bold">{bold}</strong>);
     } else if (code) {
       nodes.push(
