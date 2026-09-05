@@ -112,6 +112,52 @@ export async function getAdminUser(request: Request): Promise<AdminUser | null> 
   return { id: row.id, username: row.username, role: row.role, status: row.status, createdAt: row.created_at };
 }
 
+export async function recordAdminAudit(input: {
+  adminUserId: string;
+  action: string;
+  targetType?: string;
+  targetId?: string;
+  metadata?: Record<string, string | number | boolean | null>;
+}): Promise<void> {
+  await getD1()
+    .prepare(
+      `INSERT INTO admin_audit_logs
+       (id, admin_user_id, action, target_type, target_id, metadata_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      crypto.randomUUID(),
+      input.adminUserId,
+      input.action,
+      input.targetType ?? null,
+      input.targetId ?? null,
+      input.metadata ? JSON.stringify(input.metadata) : null,
+      Date.now(),
+    )
+    .run();
+}
+
+export async function listAdminAuditLogs(limit = 100) {
+  const rows = await getD1()
+    .prepare(
+      `SELECT l.id, l.action, l.target_type, l.target_id, l.metadata_json, l.created_at,
+              a.username AS admin_username
+       FROM admin_audit_logs l JOIN admin_users a ON a.id = l.admin_user_id
+       ORDER BY l.created_at DESC LIMIT ?`,
+    )
+    .bind(Math.min(Math.max(limit, 1), 200))
+    .all<{ id: string; action: string; target_type: string | null; target_id: string | null; metadata_json: string | null; created_at: number; admin_username: string }>();
+  return rows.results.map((row) => ({
+    id: row.id,
+    action: row.action,
+    targetType: row.target_type,
+    targetId: row.target_id,
+    metadata: row.metadata_json ? JSON.parse(row.metadata_json) : null,
+    createdAt: row.created_at,
+    adminUsername: row.admin_username,
+  }));
+}
+
 /** 管理门槛：需要有效管理员会话（role: admin / super_admin）。 */
 export async function requireAdminUser(request: Request): Promise<AdminUser> {
   const user = await getAdminUser(request);

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { BellRing, ClipboardList, Hash, LogOut, Megaphone, Send } from 'lucide-react';
+import { BellRing, ClipboardList, Hash, LogOut, Megaphone, ScrollText, Send } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +23,7 @@ type Level = (typeof levels)[number]['value'];
 type AdminMe = { username: string; role: string } | null;
 type AdminReport = { id: string; targetType: 'post' | 'reply'; targetPublicId: string; targetTitle: string; reason: string; details: string; status: string; createdAt: number };
 type AdminTag = { id: string; slug: string; name: string; color: string; status: 'active' | 'hidden'; postCount: number };
+type AdminAudit = { id: string; action: string; targetType: string | null; targetId: string | null; createdAt: number; adminUsername: string };
 
 export function AdminConsole() {
   const [me, setMe] = useState<AdminMe | null>(null);
@@ -46,6 +47,7 @@ export function AdminConsole() {
   const [boards, setBoards] = useState<BoardSummary[]>([]);
   const [newBoard, setNewBoard] = useState({ slug: '', name: '', description: '', icon: 'message-circle', accent: '#d9ff57' });
   const [tags, setTags] = useState<AdminTag[]>([]);
+  const [audit, setAudit] = useState<AdminAudit[]>([]);
   const [siteSettings, setSiteSettings] = useState({ name: '', shortName: '', description: '', primaryColor: '#d9ff57' });
   const [savingSettings, setSavingSettings] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -60,6 +62,7 @@ export function AdminConsole() {
       setSiteSettings(settingsData);
       setBoards(await apiJson<BoardSummary[]>('/api/v1/admin/boards'));
       setTags(await apiJson<AdminTag[]>('/api/v1/admin/tags'));
+      setAudit(await apiJson<AdminAudit[]>('/api/v1/admin/audit?limit=100'));
     } catch {
       // 列表加载失败静默
     }
@@ -113,6 +116,7 @@ export function AdminConsole() {
     } finally {
       setMe(null);
       setList([]);
+      setAudit([]);
     }
   }
 
@@ -290,6 +294,15 @@ export function AdminConsole() {
               </Button>
             </div>
           </form>
+        </section>
+
+        <section className="rounded-2xl border border-black/10 bg-white p-6">
+          <h2 className="flex items-center gap-2 text-lg font-black tracking-tight"><ScrollText className="size-5 text-[var(--signal-dark)]" /> 管理审计日志 <span className="text-sm font-normal text-muted-foreground">（最近 {audit.length} 条）</span></h2>
+          <p className="mt-1 text-sm text-muted-foreground">仅记录管理动作、目标与时间，不记录 IP、UA 或内容正文。</p>
+          <ul className="mt-4 divide-y divide-[var(--line)]">
+            {audit.length === 0 ? <li className="py-6 text-center text-sm text-muted-foreground">暂无审计记录。</li> : null}
+            {audit.map((item) => <li key={item.id} className="flex flex-wrap items-center gap-2 py-3 text-sm"><span className="rounded-full bg-[var(--ink)]/[0.06] px-2 py-0.5 font-mono text-xs font-bold">{item.action}</span><span className="text-muted-foreground">{item.targetType ?? '系统'}{item.targetId ? ` · ${item.targetId}` : ''}</span><span className="ml-auto text-xs text-muted-foreground">{item.adminUsername} · {absoluteTime(item.createdAt)}</span></li>)}
+          </ul>
         </section>
 
         <section className="rounded-2xl border border-black/10 bg-white p-6">

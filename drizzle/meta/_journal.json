@@ -57,6 +57,13 @@
       "when": 1788557000000,
       "tag": "0007_anon_recovery",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1788571328572,
+      "tag": "0008_safe_kate_bishop",
+      "breakpoints": true
     }
   ]
 }

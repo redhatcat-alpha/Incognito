@@ -284,6 +284,21 @@ export const adminSessions = sqliteTable(
   ],
 );
 
+/** 管理写操作审计；仅保存动作与目标标识，不记录请求 IP、UA 或正文。 */
+export const adminAuditLogs = sqliteTable(
+  'admin_audit_logs',
+  {
+    id: text('id').primaryKey(),
+    adminUserId: text('admin_user_id').notNull().references(() => adminUsers.id),
+    action: text('action').notNull(),
+    targetType: text('target_type'),
+    targetId: text('target_id'),
+    metadataJson: text('metadata_json'),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [index('idx_admin_audit_created').on(table.createdAt), index('idx_admin_audit_admin').on(table.adminUserId)],
+);
+
 /** 公告“已读”状态按匿名身份记录，浏览无需注册；注册身份仍可复用同一行。 */
 export const announcementDismissals = sqliteTable(
   'announcement_dismissals',

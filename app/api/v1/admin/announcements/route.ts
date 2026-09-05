@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { requireAdminUser } from '@/server/auth/admin';
+import { recordAdminAudit, requireAdminUser } from '@/server/auth/admin';
 import { adminAnnouncementSchema } from '@/server/forum/schemas';
 import { createAnnouncement, listAllAnnouncements } from '@/server/forum/service';
 import { jsonError } from '@/server/http';
@@ -17,7 +17,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    await requireAdminUser(request);
+    const admin = await requireAdminUser(request);
     const input = adminAnnouncementSchema.parse(await request.json());
     const data = await createAnnouncement({
       title: input.title,
@@ -25,6 +25,7 @@ export async function POST(request: Request) {
       level: input.level,
       endsAt: input.endsAt ?? null,
     });
+    await recordAdminAudit({ adminUserId: admin.id, action: 'announcement.create', targetType: 'announcement', targetId: data.id });
     return NextResponse.json({ data, error: null }, { status: 201 });
   } catch (error) {
     return jsonError(error);

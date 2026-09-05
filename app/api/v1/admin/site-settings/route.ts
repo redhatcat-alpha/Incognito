@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireAdminUser } from '@/server/auth/admin';
+import { recordAdminAudit, requireAdminUser } from '@/server/auth/admin';
 import { siteSettingsSchema } from '@/server/forum/schemas';
 import { getSiteSettings, updateSiteSettings } from '@/server/forum/service';
 import { jsonError } from '@/server/http';
@@ -9,5 +9,5 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  try { await requireAdminUser(request); const input = siteSettingsSchema.parse(await request.json()); return NextResponse.json({ data: await updateSiteSettings(input), error: null }); } catch (error) { return jsonError(error); }
+  try { const admin = await requireAdminUser(request); const input = siteSettingsSchema.parse(await request.json()); const data = await updateSiteSettings(input); await recordAdminAudit({ adminUserId: admin.id, action: 'site-settings.update', targetType: 'site-settings' }); return NextResponse.json({ data, error: null }); } catch (error) { return jsonError(error); }
 }
