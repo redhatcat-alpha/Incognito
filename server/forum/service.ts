@@ -1,4 +1,5 @@
 import { getD1 } from '@/db';
+import type { PortableDatabase, PreparedStatement } from '@/db/portable';
 import { ensureSeedData } from '@/server/forum/seed';
 
 const EDIT_WINDOW_MS = 30 * 60 * 1000;
@@ -176,7 +177,7 @@ function isMine(authorId: string, anonUserId?: string, regUserId?: string): bool
   return authorId === anonUserId || (regUserId !== undefined && authorId === regUserId);
 }
 
-async function registeredNamesByIds(db: D1Database, ids: string[]): Promise<Map<string, RegisteredAuthor>> {
+async function registeredNamesByIds(db: PortableDatabase, ids: string[]): Promise<Map<string, RegisteredAuthor>> {
   const names = new Map<string, RegisteredAuthor>();
   const unique = Array.from(new Set(ids));
   if (!unique.length) return names;
@@ -196,7 +197,7 @@ function escapeLike(value: string): string {
   return value.replaceAll(/[\\%_]/g, (match) => `\\${match}`);
 }
 
-async function assertWritableUser(db: D1Database, userId: string): Promise<void> {
+async function assertWritableUser(db: PortableDatabase, userId: string): Promise<void> {
   const user = await db
     .prepare('SELECT status FROM anonymous_users WHERE id = ? LIMIT 1')
     .bind(userId)
@@ -204,7 +205,7 @@ async function assertWritableUser(db: D1Database, userId: string): Promise<void>
   if (!user || user.status !== 'active') throw new Error('USER_NOT_WRITABLE');
 }
 
-async function assertRegisteredWritable(db: D1Database, userId: string): Promise<void> {
+async function assertRegisteredWritable(db: PortableDatabase, userId: string): Promise<void> {
   const user = await db
     .prepare('SELECT status FROM registered_users WHERE id = ? LIMIT 1')
     .bind(userId)
@@ -215,7 +216,7 @@ async function assertRegisteredWritable(db: D1Database, userId: string): Promise
 
 /** 按发言身份校验并可返回写入作者行 ID */
 async function resolveWriter(
-  db: D1Database,
+  db: PortableDatabase,
   identity: 'anonymous' | 'registered',
   anonUserId: string,
   regUserId?: string,
@@ -299,7 +300,7 @@ function mapPost(
   };
 }
 
-async function resolveTagIds(db: D1Database, names: string[]): Promise<string[]> {
+async function resolveTagIds(db: PortableDatabase, names: string[]): Promise<string[]> {
   const unique = Array.from(new Set(names.map((name) => name.trim()).filter(Boolean))).slice(0, 5);
   const ids: string[] = [];
   for (const name of unique) {
@@ -321,7 +322,7 @@ async function resolveTagIds(db: D1Database, names: string[]): Promise<string[]>
   return ids;
 }
 
-function tagLinkStatements(db: D1Database, postId: string, tagIds: string[]): D1PreparedStatement[] {
+function tagLinkStatements(db: PortableDatabase, postId: string, tagIds: string[]): PreparedStatement[] {
   return [
     db.prepare('DELETE FROM post_tags WHERE post_id = ?').bind(postId),
     ...tagIds.map((tagId) =>
@@ -650,7 +651,7 @@ export async function createReply(
   const id = crypto.randomUUID();
   const publicId = crypto.randomUUID();
   const timestamp = Date.now();
-  const statements: D1PreparedStatement[] = [];
+  const statements: PreparedStatement[] = [];
   if (identity === 'anonymous') {
     statements.push(
       db
@@ -1204,7 +1205,7 @@ export async function reviewReport(reportId: string, status: 'resolved' | 'rejec
   const report = await db.prepare('SELECT target_type, target_id FROM reports WHERE id = ? LIMIT 1').bind(reportId).first<{ target_type: string; target_id: string }>();
   if (!report) throw new Error('POST_NOT_FOUND');
   const table = report.target_type === 'post' ? 'posts' : 'replies';
-  const statements: D1PreparedStatement[] = [db.prepare('UPDATE reports SET status = ? WHERE id = ?').bind(status, reportId)];
+  const statements: PreparedStatement[] = [db.prepare('UPDATE reports SET status = ? WHERE id = ?').bind(status, reportId)];
   if (hideTarget) statements.push(db.prepare(`UPDATE ${table} SET status = 'hidden', updated_at = ? WHERE id = ?`).bind(Date.now(), report.target_id));
   await db.batch(statements);
   return { reviewed: true, status, hidden: hideTarget };
@@ -1280,7 +1281,7 @@ export async function destroyAnonIdentity(userId: string) {
     counters.set(key, entry);
   }
 
-  const statements: D1PreparedStatement[] = [
+  const statements: PreparedStatement[] = [
     db.prepare('UPDATE anonymous_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL').bind(timestamp, userId),
     db.prepare("UPDATE anonymous_users SET status = 'deleted', avatar_seed = '', deletion_requested_at = ? WHERE id = ?").bind(timestamp, userId),
     db.prepare('DELETE FROM browsing_history WHERE user_id = ?').bind(userId),
