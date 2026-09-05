@@ -68,12 +68,12 @@ export function AuthPage() {
         </Link>
         <div className="relative max-w-md">
           <h1 className="text-4xl font-black leading-tight tracking-[-0.04em]">
-            登录后，
+            先匿名浏览，
             <br />
             再决定怎么介绍自己。
           </h1>
           <p className="mt-4 text-base leading-7 text-white/70">
-            浏览、发言前需要先登录。每次发帖和回复，你都可以选择
+            无需注册即可浏览、发帖和回复；注册仅用于需要固定 ID 的场景。每次发帖和回复，你都可以选择
             <span className="mx-1 inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 font-bold text-[var(--signal)]">
               <Ghost className="size-3.5" /> 匿名发言
             </span>
@@ -105,7 +105,7 @@ export function AuthPage() {
           <div className="rounded-3xl border border-black/10 bg-white p-6 shadow-[0_10px_40px_rgb(17_24_21/0.06)] sm:p-7">
             <h2 className="text-2xl font-black tracking-[-0.03em]">{mode === 'login' ? '登录无名岛' : '创建你的账号'}</h2>
             <p className="mt-1.5 text-sm leading-6 text-muted-foreground">
-              {mode === 'login' ? '登录后即可浏览与发言。' : '注册即获得唯一 ID，可随时以匿名或固定 ID 两种身份发言。'}
+              {mode === 'login' ? '登录后可使用固定 ID 发言；匿名发言无需登录。' : '注册即获得唯一 ID，可随时以匿名或固定 ID 两种身份发言。'}
             </p>
 
             <div className="mt-5 grid grid-cols-2 gap-1 rounded-full bg-[var(--ink)]/[0.05] p-1" role="tablist" aria-label="登录或注册">
