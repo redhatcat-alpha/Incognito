@@ -47,10 +47,18 @@ const toolButton =
 /** 常规所见即所得富文本编辑器（TipTap）。输出受限 HTML。 */
 export function RichEditor({ initialContent = '', onChange, placeholder, minHeightClass, plain = false }: RichEditorProps) {
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [enabledEmojiIds, setEnabledEmojiIds] = useState<number[] | null>(null);
   const onChangeRef = useRef(onChange);
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
+  useEffect(() => {
+    let active = true;
+    void fetch('/api/v1/emojis', { credentials: 'same-origin' }).then((response) => response.ok ? response.json() as Promise<{ data?: { ids?: number[] } }> : null).then((payload) => {
+      if (active && payload?.data?.ids) setEnabledEmojiIds(payload.data.ids);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
 
   const editor = useEditor({
     extensions: plain
@@ -210,7 +218,7 @@ export function RichEditor({ initialContent = '', onChange, placeholder, minHeig
 
       {emojiOpen ? (
         <div className="grid max-h-56 grid-cols-8 gap-1 overflow-y-auto border-b border-[var(--line)] bg-[#fbfcf9] p-2">
-          {tiebaEmojis.map((item) => (
+          {tiebaEmojis.filter((item) => enabledEmojiIds === null || enabledEmojiIds.includes(item.id)).map((item) => (
             <button
               key={item.id}
               type="button"

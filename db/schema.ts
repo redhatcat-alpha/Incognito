@@ -66,6 +66,16 @@ export const passkeyChallenges = sqliteTable(
   (table) => [index('idx_passkey_challenge_expiry').on(table.expiresAt)],
 );
 
+export const emojiSettings = sqliteTable(
+  'emoji_settings',
+  {
+    emojiId: integer('emoji_id').primaryKey(),
+    status: text('status').notNull().default('active'),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [index('idx_emoji_settings_status').on(table.status)],
+);
+
 /**
  * 注册账号。id 与 anonymous_users 共享同一 ID 空间：注册时同时创建一行
  * anonymous_users 作为“署名身份”，其发布内容以 username 展示而非匿名代号。

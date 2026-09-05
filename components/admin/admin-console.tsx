@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useCallback, useEffect, useState } from 'react';
 import { BellRing, ClipboardList, Hash, LogOut, Megaphone, ScrollText, Send } from 'lucide-react';
 
@@ -24,6 +25,7 @@ type AdminMe = { username: string; role: string } | null;
 type AdminReport = { id: string; targetType: 'post' | 'reply'; targetPublicId: string; targetTitle: string; reason: string; details: string; status: string; createdAt: number };
 type AdminTag = { id: string; slug: string; name: string; color: string; status: 'active' | 'hidden'; postCount: number };
 type AdminAudit = { id: string; action: string; targetType: string | null; targetId: string | null; createdAt: number; adminUsername: string };
+type AdminEmoji = { id: number; src: string; alt: string; status: 'active' | 'hidden'; updatedAt: number | null };
 
 export function AdminConsole() {
   const [me, setMe] = useState<AdminMe | null>(null);
@@ -48,6 +50,7 @@ export function AdminConsole() {
   const [newBoard, setNewBoard] = useState({ slug: '', name: '', description: '', icon: 'message-circle', accent: '#d9ff57' });
   const [tags, setTags] = useState<AdminTag[]>([]);
   const [audit, setAudit] = useState<AdminAudit[]>([]);
+  const [emojis, setEmojis] = useState<AdminEmoji[]>([]);
   const [siteSettings, setSiteSettings] = useState({ name: '', shortName: '', description: '', primaryColor: '#d9ff57' });
   const [savingSettings, setSavingSettings] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -63,6 +66,7 @@ export function AdminConsole() {
       setBoards(await apiJson<BoardSummary[]>('/api/v1/admin/boards'));
       setTags(await apiJson<AdminTag[]>('/api/v1/admin/tags'));
       setAudit(await apiJson<AdminAudit[]>('/api/v1/admin/audit?limit=100'));
+      setEmojis(await apiJson<AdminEmoji[]>('/api/v1/admin/emojis'));
     } catch {
       // 列表加载失败静默
     }
@@ -117,6 +121,7 @@ export function AdminConsole() {
       setMe(null);
       setList([]);
       setAudit([]);
+      setEmojis([]);
     }
   }
 
@@ -182,6 +187,15 @@ export function AdminConsole() {
   async function saveTag(tag: AdminTag) {
     try { await apiJson(`/api/v1/admin/tags/${encodeURIComponent(tag.slug)}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: tag.name, color: tag.color, status: tag.status }) }); flash(`标签「${tag.name}」已保存`); }
     catch (cause) { flash(cause instanceof Error ? cause.message : '标签保存失败'); }
+  }
+
+  async function toggleEmoji(emoji: AdminEmoji) {
+    const status = emoji.status === 'active' ? 'hidden' : 'active';
+    try {
+      await apiJson(`/api/v1/admin/emojis/${emoji.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ status }) });
+      setEmojis((items) => items.map((item) => item.id === emoji.id ? { ...item, status } : item));
+      flash(status === 'active' ? `表情 ${emoji.id} 已恢复` : `表情 ${emoji.id} 已隐藏`);
+    } catch (cause) { flash(cause instanceof Error ? cause.message : '表情更新失败'); }
   }
 
   if (checking) {
@@ -310,6 +324,14 @@ export function AdminConsole() {
           <p className="mt-1 text-sm text-muted-foreground">调整标签名称、颜色和前台可见状态。</p>
           <div className="mt-4 grid gap-2">
             {tags.map((tag) => <div key={tag.slug} className="flex flex-wrap items-center gap-2 rounded-xl border border-black/10 bg-[#f8faf6] p-3"><input className="h-9 min-w-32 flex-1 rounded-lg border border-black/15 bg-white px-2 text-sm" value={tag.name} onChange={(e) => setTags((items) => items.map((item) => item.slug === tag.slug ? { ...item, name: e.target.value } : item))} /><input type="color" className="h-9 w-12 rounded border border-black/15" value={tag.color} onChange={(e) => setTags((items) => items.map((item) => item.slug === tag.slug ? { ...item, color: e.target.value } : item))} /><select className="h-9 rounded-lg border border-black/15 bg-white px-2 text-sm" value={tag.status} onChange={(e) => setTags((items) => items.map((item) => item.slug === tag.slug ? { ...item, status: e.target.value as AdminTag['status'] } : item))}><option value="active">可见</option><option value="hidden">隐藏</option></select><span className="text-xs text-muted-foreground">#{tag.slug} · {tag.postCount}</span><Button size="sm" className="h-8 rounded-full" onClick={() => void saveTag(tag)}>保存</Button></div>)}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-black/10 bg-white p-6">
+          <h2 className="text-lg font-black tracking-tight">表情资源管理</h2>
+          <p className="mt-1 text-sm text-muted-foreground">隐藏后不会出现在编辑器面板，历史内容仍可正常显示。</p>
+          <div className="mt-4 grid grid-cols-6 gap-2 sm:grid-cols-10">
+            {emojis.map((emoji) => <button key={emoji.id} type="button" onClick={() => void toggleEmoji(emoji)} title={`${emoji.alt} · ${emoji.status === 'active' ? '隐藏' : '恢复'}`} className={cn('rounded-lg border p-1 text-center text-[10px] font-bold', emoji.status === 'active' ? 'border-black/10 bg-[#f8faf6]' : 'border-dashed border-black/20 opacity-45')}><Image src={emoji.src} alt={emoji.alt} width={24} height={24} unoptimized className="mx-auto size-6 object-contain" /><span>{emoji.id}</span></button>)}
           </div>
         </section>
 
