@@ -88,6 +88,7 @@ export async function loginAdmin(
     )
     .bind(crypto.randomUUID(), row.id, tokenHash, now + SESSION_TTL_SECONDS * 1000, now, now)
     .run();
+  await recordAdminAudit({ adminUserId: row.id, action: 'admin.login' });
   return {
     user: { id: row.id, username: row.username, role: row.role, status: row.status, createdAt: row.created_at },
     setCookie: serializeCookie(token, request),
@@ -169,10 +170,12 @@ export async function requireAdminUser(request: Request): Promise<AdminUser> {
 export async function logoutAdmin(request: Request): Promise<boolean> {
   const token = readCookie(request, COOKIE_NAME);
   if (!token) return false;
+  const admin = await getAdminUser(request);
   const tokenHash = await hashToken(token);
   const result = await getD1()
     .prepare('UPDATE admin_sessions SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL')
     .bind(Date.now(), tokenHash)
     .run();
+  if (admin && result.meta.changes > 0) await recordAdminAudit({ adminUserId: admin.id, action: 'admin.logout' });
   return result.meta.changes > 0;
 }
