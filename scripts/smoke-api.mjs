@@ -19,6 +19,8 @@ await call(`/api/v1/posts/${post.id}/replies`, { method: 'POST', headers: { 'con
 await call(`/api/v1/history/${post.id}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ maxReadFloor: 1, anchorReplyId: null }) });
 const phrase = await call('/api/v1/anon/recovery', { method: 'POST' });
 if (!phrase.phrase || phrase.phrase.split(' ').length !== 6) throw new Error('recovery phrase invalid');
+const passkeyOptions = await call('/api/v1/anon/passkey/auth/options', { method: 'POST' });
+if (!passkeyOptions.challengeId || !passkeyOptions.challenge) throw new Error('passkey challenge invalid');
 let adminCookie = '';
 async function adminCall(path, options = {}) {
   const headers = new Headers(options.headers);
