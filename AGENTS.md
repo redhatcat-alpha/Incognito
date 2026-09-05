@@ -16,13 +16,13 @@
 
 - `admin_users` / `admin_sessions` 独立于注册用户体系（PRD：管理员与匿名身份分离，不共会话）。模块：`server/auth/admin.ts`。
 - 默认账号 `admin/admin123`（role `super_admin`）：`loginAdmin` 在每次登录前幂等种子（缺账号自动重建）。改默认密码流程：直接更新 `admin_users.pass_hash`（用 `hashPassword`）。
-- 现有接口仅 `/api/v1/admin/login|logout|me`；管理控制台页面与内容治理 API 未实现。任何新的管理写操作必须校验 `getAdminUser(request)` 且记审计（见 PRD MOD-002）。
+- 已实现公告、站点设置、板块、标签、举报队列与处理的管理 API/UI；完整审计日志仍待补齐。任何新的管理写操作必须校验 `getAdminUser(request)` 且记审计（见 PRD MOD-002）。
 
-## 登录门槛（2026-09 起）
+## 匿名访问与可选账号
 
-- 浏览与发言都要求登录：全部 `/api/v1/*` 内容路由在 `ensureAnonymousSession` 之前先 `requireRegisteredUser(request)`（未登录统一 401 `AUTH_REQUIRED`）。
-- 客户端统一在 `ForumShell` 内做门槛：`useRegisteredUser` 未登录时 `router.replace('/login?next=…')`；登录页是独立页面 `/login`（不用 ForumShell，避免重定向环），登录成功后回跳 `next`。
-- 匿名发言仍是“登录后的选项”：匿名身份（匿名 cookie 行）在登录后首次内容请求时自动创建；退出登录只清注册会话，匿名设备身份保留，但 API 门槛保证未登录无法读写。
+- 浏览与发言默认无需注册或登录：内容路由通过 `ensureAnonymousSession` 自动创建匿名会话，服务端不存邮箱/手机/姓名/IP/UA。
+- 用户可选注册固定用户名/密码身份；注册会话只用于署名与跨设备恢复，不改变匿名浏览能力。`/login` 与 `/register` 不应成为论坛访问门槛。
+- 任何需要注册身份的接口必须显式调用 `requireRegisteredUser(request)`；普通论坛读写不得添加该门槛。
 
 ## 账号与发言身份模型（重要）
 
@@ -97,7 +97,7 @@ db/schema.ts + drizzle/  # schema 与迁移（仅 SQLite/D1 方言）
 
 ## 测试现状
 
-暂无自动化测试框架。验证手段：
+当前使用 Node 原生 `node:test` 覆盖媒体元数据剥离，并提供 API 冒烟脚本；提交前仍需补齐端到端与三数据库矩阵：
 
 - `npx tsc --noEmit` + `npm run lint`
 - 本地 dev server + curl 冒烟：会话 cookie jar → 发帖 → 回帖/引用 → 投票切换 → 进度 PUT/GET → 搜索 → 编辑/删除（30 分钟窗内）→ 举报去重 → 同步开关 → 销毁身份
@@ -107,4 +107,8 @@ PRD 第 18 节列出了上线前应补齐的 Vitest/Playwright 与三库矩阵�
 
 ## 已知缺口（不要误以为已实现）
 
-管理后台 `/admin/*`、图片/头像/表情上传（R2）、恢复短语与 Passkey、列表分页（帖子页上限 200 楼层/列表 50）。实现前先读 PRD 对应条目与「23 节业务参数」。
+- 完整管理员审计日志与表情资源管理。
+- 图片/头像上传已支持 R2、类型校验与 EXIF/元数据剥离；缩略图与后台处理队列仍未实现。
+- 恢复短语已实现；Passkey/WebAuthn 跨设备恢复仍未实现。
+- 帖子列表已支持游标加载更多；单帖楼层仍有 200 条上限，尚无楼层分页。
+- 当前生产 schema 为 SQLite/D1 方言，PostgreSQL/MySQL 适配层与三库迁移/测试矩阵仍未实现。
