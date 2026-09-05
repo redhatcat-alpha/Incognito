@@ -206,6 +206,7 @@ export function ThreadView({ postId }: { postId: string }) {
   const [thread, setThread] = useState<ThreadData | null>(null);
   const [loadError, setLoadError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadingMoreReplies, setLoadingMoreReplies] = useState(false);
   const [notice, setNotice] = useState<GlobalNotice>(null);
   const { me } = useRegisteredUser();
   const [quote, setQuote] = useState<{ replyId: string; floorNo: number; alias: string } | null>(null);
@@ -249,6 +250,27 @@ export function ThreadView({ postId }: { postId: string }) {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  const loadMoreReplies = useCallback(async () => {
+    if (!thread?.nextReplyPage || loadingMoreReplies) return;
+    setLoadingMoreReplies(true);
+    try {
+      const data = await apiJson<ThreadData>(`/api/v1/posts/${encodeURIComponent(postId)}?replyPage=${thread.nextReplyPage}`);
+      setThread((current) => {
+        if (!current) return current;
+        const existing = new Set(current.replies.map((reply) => reply.id));
+        return {
+          ...current,
+          replies: [...current.replies, ...data.replies.filter((reply) => !existing.has(reply.id))],
+          nextReplyPage: data.nextReplyPage,
+        };
+      });
+    } catch (cause) {
+      setNotice({ tone: 'error', text: cause instanceof Error ? cause.message : '加载更多楼层失败' });
+    } finally {
+      setLoadingMoreReplies(false);
+    }
+  }, [loadingMoreReplies, postId, thread]);
 
   const flashFloor = useCallback((element: Element) => {
     element.classList.add('floor-flash');
@@ -695,6 +717,13 @@ export function ThreadView({ postId }: { postId: string }) {
                 opAlias={opAlias}
               />
             ))}
+            {thread.nextReplyPage ? (
+              <div className="flex justify-center pt-2">
+                <Button variant="outline" className="rounded-full bg-white" disabled={loadingMoreReplies} onClick={() => void loadMoreReplies()}>
+                  {loadingMoreReplies ? '加载中…' : '加载更多楼层'}
+                </Button>
+              </div>
+            ) : null}
           </div>
         )}
       </div>

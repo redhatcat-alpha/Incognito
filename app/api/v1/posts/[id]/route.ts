@@ -11,7 +11,9 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     const session = await ensureAnonymousSession(request);
     const { id } = await context.params;
     const regId = await registeredAnonId(request);
-    const data = await getThread(id, session.userId, regId ?? undefined);
+    const pageParam = Number(new URL(request.url).searchParams.get('replyPage'));
+    const replyPage = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 0;
+    const data = await getThread(id, session.userId, regId ?? undefined, replyPage);
     if (!data) {
       return NextResponse.json(
         { data: null, error: { code: 'POST_NOT_FOUND', message: '帖子不存在' } },

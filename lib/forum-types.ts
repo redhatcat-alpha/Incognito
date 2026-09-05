@@ -58,6 +58,7 @@ export type ThreadData = {
   history: { maxReadFloor: number; anchorReplyId: string | null; lastViewedAt: number } | null;
   canReply: boolean;
   totalFloors: number;
+  nextReplyPage?: number | null;
 };
 
 export type HistoryEntry = {

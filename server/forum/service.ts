@@ -472,7 +472,7 @@ export async function getBoard(slug: string): Promise<PublicBoard | null> {
   return row ? mapBoard(row) : null;
 }
 
-export async function getThread(publicId: string, userId: string, regUserId?: string) {
+export async function getThread(publicId: string, userId: string, regUserId?: string, replyPage = 0) {
   await ensureSeedData();
   const db = getD1();
   const post = await db
@@ -504,9 +504,9 @@ export async function getThread(publicId: string, userId: string, regUserId?: st
          LEFT JOIN thread_aliases ta ON ta.post_id = r.post_id AND ta.user_id = r.author_id
          WHERE r.post_id = ? AND r.status IN ('published', 'deleted')
          ORDER BY CASE WHEN r.floor_no = 0 THEN 1 ELSE 0 END, r.floor_no ASC, r.created_at ASC
-         LIMIT 200`,
+         LIMIT 201 OFFSET ?`,
       )
-      .bind(userId, post.id)
+      .bind(userId, post.id, Math.max(0, Math.floor(replyPage)) * 200)
       .all<ReplyRow>(),
     db
       .prepare('SELECT max_read_floor, anchor_reply_id, last_viewed_at FROM browsing_history WHERE user_id = ? AND post_id = ? LIMIT 1')
@@ -515,14 +515,16 @@ export async function getThread(publicId: string, userId: string, regUserId?: st
     db.prepare('SELECT status FROM anonymous_users WHERE id = ? LIMIT 1').bind(userId).first<{ status: string }>(),
   ]);
 
-  const names = await registeredNamesByIds(db, [post.author_id, ...replyResult.results.map((reply) => reply.author_id)]);
+  const hasMoreReplies = replyResult.results.length > 200;
+  const pageRows = hasMoreReplies ? replyResult.results.slice(0, 200) : replyResult.results;
+  const names = await registeredNamesByIds(db, [post.author_id, ...pageRows.map((reply) => reply.author_id)]);
 
   const boardActive = post.board_status === 'active';
   const userWritable = user?.status === 'active';
   const postAuthor = names.get(post.author_id) ?? null;
   return {
     post: mapPost(post, tagMap.get(post.id) ?? [], userId, regUserId, postAuthor),
-    replies: replyResult.results.map<PublicReply>((reply) => {
+    replies: pageRows.map<PublicReply>((reply) => {
       if (reply.status === 'deleted') {
         return {
           id: reply.public_id,
@@ -568,6 +570,7 @@ export async function getThread(publicId: string, userId: string, regUserId?: st
       : null,
     canReply: post.status === 'published' && boardActive && userWritable,
     totalFloors: post.reply_count + 1,
+    nextReplyPage: hasMoreReplies ? Math.max(0, Math.floor(replyPage)) + 1 : null,
   };
 }
 
