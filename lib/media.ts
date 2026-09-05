@@ -12,6 +12,7 @@ export function stripJpegExif(input: Uint8Array): Uint8Array {
     if (marker !== 0xe1) output.push(...input.slice(offset, offset + 2 + length));
     offset += 2 + length;
   }
+  if (output.length === 2 && offset < input.length) output.push(...input.slice(offset));
   return new Uint8Array(output);
 }
 

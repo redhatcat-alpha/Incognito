@@ -12,7 +12,9 @@
     "lint": "oxlint app components/forum components/admin components/auth server lib db types",
     "format": "oxfmt",
     "db:generate": "drizzle-kit generate"
-    ,"test:smoke": "node scripts/smoke-api.mjs"
+    ,"test:smoke": "node scripts/smoke-api.mjs",
+    "test:unit": "node --experimental-strip-types --test tests/*.test.mjs",
+    "test": "npm run test:unit"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",
