@@ -1,0 +1,52 @@
+name: database-matrix
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  migrations:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - driver: postgres
+            image: postgres:16
+            port: 5432
+            database_url: postgres://incognito:incognito@localhost:5432/incognito
+          - driver: mysql
+            image: mysql:8.4
+            port: 3306
+            database_url: mysql://incognito:incognito@localhost:3306/incognito
+    services:
+      database:
+        image: ${{ matrix.image }}
+        ports:
+          - ${{ matrix.port }}:${{ matrix.port }}
+        env:
+          POSTGRES_USER: incognito
+          POSTGRES_PASSWORD: incognito
+          POSTGRES_DB: incognito
+          MYSQL_USER: incognito
+          MYSQL_PASSWORD: incognito
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: incognito
+        options: >-
+          --health-cmd "${{ matrix.driver == 'postgres' && 'pg_isready -U incognito -d incognito' || 'mysqladmin ping -h 127.0.0.1 -uroot -proot' }}"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:migrate
+        env:
+          DATABASE_DRIVER: ${{ matrix.driver }}
+          DATABASE_URL: ${{ matrix.database_url }}
+      - run: node scripts/verify-migrations.mjs
+        env:
+          DATABASE_DRIVER: ${{ matrix.driver }}
+          DATABASE_URL: ${{ matrix.database_url }}
