@@ -78,7 +78,7 @@ docker compose -f deploy/docker-compose.yaml up --build
 
 ### Node 数据库驱动
 
-领域服务现在通过统一的 SQL 兼容接口运行。自托管 Node 环境可设置 `DATABASE_DRIVER=postgres` 或 `DATABASE_DRIVER=mysql`，并提供对应的 `DATABASE_URL`；未设置时继续使用 Cloudflare D1/SQLite。生产切库前仍需执行对应方言的迁移并完成数据校验，当前仓库已提供运行时驱动适配，三库迁移脚本与 CI 矩阵仍在补齐。
+领域服务现在通过统一的 SQL 兼容接口运行。自托管 Node 环境可设置 `DATABASE_DRIVER=postgres` 或 `DATABASE_DRIVER=mysql`，并提供对应的 `DATABASE_URL`；未设置时继续使用 Cloudflare D1/SQLite。迁移命令为 `npm run db:migrate`（PostgreSQL/MySQL），会按文件名幂等记录已执行版本；生产切库前仍需完成数据校验与 CI 矩阵验证。
 
 ## 🗂 项目结构
 
