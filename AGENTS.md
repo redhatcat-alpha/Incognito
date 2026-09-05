@@ -109,6 +109,6 @@ PRD 第 18 节列出了上线前应补齐的 Vitest/Playwright 与三库矩阵�
 
 - 管理员审计日志已实现（管理写操作记录动作、目标与时间）；表情资源管理仍待补齐。
 - 图片/头像上传已支持 R2、类型校验与 EXIF/元数据剥离；缩略图与后台处理队列仍未实现。
-- 恢复短语已实现；Passkey/WebAuthn 跨设备恢复仍未实现。
+- 恢复短语与 Passkey/WebAuthn 跨设备恢复已实现；上线前应在目标浏览器完成真实设备验收。
 - 帖子列表与单帖楼层均支持分页加载（楼层每页 200 条）；需继续关注极大线程的性能压测。
 - 运行时 SQL 接口与 `npm run db:migrate` 已支持 Node 下的 PostgreSQL/MySQL 驱动选择（`DATABASE_DRIVER` + `DATABASE_URL`）；并发语义校验与三库 CI 测试矩阵仍未实现。

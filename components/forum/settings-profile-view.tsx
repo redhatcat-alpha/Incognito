@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
-import { Laptop, LogOut, ShieldCheck, Trash2 } from 'lucide-react';
+import { Fingerprint, Laptop, LogOut, ShieldCheck, Trash2 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -49,6 +49,31 @@ export function SettingsProfileView() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [recoveryPhrase, setRecoveryPhrase] = useState('');
   const [creatingRecovery, setCreatingRecovery] = useState(false);
+  const [registeringPasskey, setRegisteringPasskey] = useState(false);
+
+  const bufferToBase64 = (value: ArrayBuffer) => {
+    const bytes = new Uint8Array(value);
+    let binary = '';
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+  };
+
+  const registerPasskey = async () => {
+    if (!window.PublicKeyCredential || !navigator.credentials?.create) { setError('当前设备或浏览器不支持 Passkey'); return; }
+    setRegisteringPasskey(true); setError('');
+    try {
+      const options = await apiJson<{ challengeId: string; challenge: string; rp: { name: string; id: string } }>('/api/v1/anon/passkey/register/options', { method: 'POST' });
+      const decode = (value: string) => { const normalized = value.replaceAll('-', '+').replaceAll('_', '/') + '='.repeat((4 - (value.length % 4)) % 4); const binary = atob(normalized); return Uint8Array.from(binary, (char) => char.charCodeAt(0)); };
+      const credential = await navigator.credentials.create({ publicKey: { challenge: decode(options.challenge).buffer as ArrayBuffer, rp: options.rp, user: { id: crypto.getRandomValues(new Uint8Array(16)), name: 'anonymous', displayName: '匿名身份' }, pubKeyCredParams: [{ type: 'public-key', alg: -7 }], authenticatorSelection: { residentKey: 'required', userVerification: 'preferred' }, timeout: 120000 } });
+      if (!(credential instanceof PublicKeyCredential)) throw new Error('PASSKEY_ASSERTION_INVALID');
+      const response = credential.response as AuthenticatorAttestationResponse;
+      const publicKey = response.getPublicKey?.();
+      if (!publicKey) throw new Error('PASSKEY_UNSUPPORTED');
+      await apiJson('/api/v1/anon/passkey/register/verify', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ challengeId: options.challengeId, credentialId: bufferToBase64(credential.rawId), publicKey: bufferToBase64(publicKey), clientDataJSON: bufferToBase64(response.clientDataJSON) }) });
+      setNotice('Passkey 已绑定，可用于跨设备恢复');
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Passkey 绑定失败'); }
+    finally { setRegisteringPasskey(false); }
+  };
 
   const load = useCallback(async () => {
     setError('');
@@ -176,7 +201,7 @@ export function SettingsProfileView() {
               <p className="flex items-start gap-2">
                 <ShieldCheck className="mt-0.5 size-4 shrink-0 text-[var(--signal-dark)]" />
                 <span>
-                  清除浏览器数据或退出当前设备都会让身份令牌失效，且当前版本暂不支持恢复短语或 Passkey。请勿在公共设备上留下登录状态。
+                  清除浏览器数据或退出当前设备都会让身份令牌失效。可使用恢复短语或 Passkey 找回匿名身份，请勿在公共设备上留下登录状态。
                 </span>
               </p>
             </div>
@@ -185,6 +210,11 @@ export function SettingsProfileView() {
               <p className="mt-1 text-amber-900/80">生成一次性恢复短语。服务端只保存哈希，请立即抄写保存，离开页面后不会再次显示。</p>
               <Button type="button" size="sm" variant="outline" className="mt-3 rounded-full bg-white" disabled={creatingRecovery} onClick={async () => { setCreatingRecovery(true); try { const data = await apiJson<{ phrase: string }>('/api/v1/anon/recovery', { method: 'POST' }); setRecoveryPhrase(data.phrase); } catch (cause) { setError(cause instanceof Error ? cause.message : '生成失败'); } finally { setCreatingRecovery(false); } }}>{creatingRecovery ? '生成中…' : '生成恢复短语'}</Button>
               {recoveryPhrase ? <p className="mt-3 select-all rounded-lg bg-white px-3 py-2 font-mono font-bold tracking-wider text-amber-950">{recoveryPhrase}</p> : null}
+              <div className="mt-4 border-t border-amber-300/60 pt-4">
+                <p className="font-bold text-amber-950">绑定 Passkey</p>
+                <p className="mt-1 text-amber-900/80">使用设备的生物识别或系统密钥保存匿名身份，不会上传个人资料。</p>
+                <Button type="button" size="sm" variant="outline" className="mt-3 gap-1.5 rounded-full bg-white" disabled={registeringPasskey} onClick={() => void registerPasskey()}><Fingerprint className="size-4" />{registeringPasskey ? '绑定中…' : '绑定 Passkey'}</Button>
+              </div>
             </div>
           </Section>
 

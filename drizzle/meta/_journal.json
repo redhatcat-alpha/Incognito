@@ -64,6 +64,13 @@
       "when": 1788571328572,
       "tag": "0008_safe_kate_bishop",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1788584591753,
+      "tag": "0009_strong_nekra",
+      "breakpoints": true
     }
   ]
 }

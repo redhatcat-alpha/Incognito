@@ -38,6 +38,34 @@ export const anonymousRecoveries = sqliteTable(
   (table) => [uniqueIndex('uq_anonymous_recoveries_hash').on(table.phraseHash), index('idx_anonymous_recoveries_user').on(table.userId)],
 );
 
+export const passkeyCredentials = sqliteTable(
+  'passkey_credentials',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull().references(() => anonymousUsers.id),
+    credentialId: text('credential_id').notNull(),
+    publicKey: text('public_key').notNull(),
+    signCount: integer('sign_count').notNull().default(0),
+    createdAt: integer('created_at').notNull(),
+    lastUsedAt: integer('last_used_at'),
+    revokedAt: integer('revoked_at'),
+  },
+  (table) => [uniqueIndex('uq_passkey_credential_id').on(table.credentialId), index('idx_passkey_user').on(table.userId)],
+);
+
+export const passkeyChallenges = sqliteTable(
+  'passkey_challenges',
+  {
+    id: text('id').primaryKey(),
+    challenge: text('challenge').notNull(),
+    userId: text('user_id').references(() => anonymousUsers.id),
+    purpose: text('purpose').notNull(),
+    expiresAt: integer('expires_at').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [index('idx_passkey_challenge_expiry').on(table.expiresAt)],
+);
+
 /**
  * 注册账号。id 与 anonymous_users 共享同一 ID 空间：注册时同时创建一行
  * anonymous_users 作为“署名身份”，其发布内容以 username 展示而非匿名代号。

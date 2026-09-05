@@ -3,6 +3,9 @@ import { ZodError } from 'zod';
 
 const safeErrors: Record<string, { status: number; message: string }> = {
   RECOVERY_PHRASE_INVALID: { status: 400, message: '恢复短语无效或已失效' },
+  PASSKEY_UNSUPPORTED: { status: 400, message: '当前设备或浏览器不支持 Passkey' },
+  PASSKEY_CHALLENGE_INVALID: { status: 400, message: 'Passkey 验证已过期，请重试' },
+  PASSKEY_ASSERTION_INVALID: { status: 401, message: 'Passkey 验证失败' },
   MEDIA_STORAGE_UNAVAILABLE: { status: 503, message: '媒体存储暂不可用' },
   MEDIA_FILE_REQUIRED: { status: 400, message: '请上传图片文件' },
   MEDIA_FILE_INVALID: { status: 400, message: '仅支持 2MB 以内的 JPG、PNG 或 WebP 图片' },
