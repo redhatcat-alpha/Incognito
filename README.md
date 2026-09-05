@@ -76,6 +76,10 @@ docker compose -f deploy/docker-compose.yaml up --build
 
 > 注意：SQLite/D1 单实例适用于个人站与低流量；PRD 建议公共高并发部署使用 PostgreSQL/MySQL，仓库当前为 D1 方言（`db/schema.ts`），切换数据库属离线迁移，需另行引入方言层。
 
+### Node 数据库驱动
+
+领域服务现在通过统一的 SQL 兼容接口运行。自托管 Node 环境可设置 `DATABASE_DRIVER=postgres` 或 `DATABASE_DRIVER=mysql`，并提供对应的 `DATABASE_URL`；未设置时继续使用 Cloudflare D1/SQLite。生产切库前仍需执行对应方言的迁移并完成数据校验，当前仓库已提供运行时驱动适配，三库迁移脚本与 CI 矩阵仍在补齐。
+
 ## 🗂 项目结构
 
 ```text

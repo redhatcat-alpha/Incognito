@@ -111,4 +111,4 @@ PRD 第 18 节列出了上线前应补齐的 Vitest/Playwright 与三库矩阵�
 - 图片/头像上传已支持 R2、类型校验与 EXIF/元数据剥离；缩略图与后台处理队列仍未实现。
 - 恢复短语已实现；Passkey/WebAuthn 跨设备恢复仍未实现。
 - 帖子列表与单帖楼层均支持分页加载（楼层每页 200 条）；需继续关注极大线程的性能压测。
-- 当前生产 schema 为 SQLite/D1 方言，PostgreSQL/MySQL 适配层与三库迁移/测试矩阵仍未实现。
+- 运行时 SQL 接口已支持 Node 下的 PostgreSQL/MySQL 驱动选择（`DATABASE_DRIVER` + `DATABASE_URL`）；对应方言迁移、并发语义校验与三库 CI 测试矩阵仍未实现。

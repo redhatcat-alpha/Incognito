@@ -1,6 +1,16 @@
 import { env } from 'cloudflare:workers';
 import { drizzle } from 'drizzle-orm/d1';
 import * as schema from './schema';
+import { createPortableDatabase, type PortableDatabase, type SqlDriver } from './portable';
+
+const nodeEnv = () => (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {};
+
+function configuredDriver(): SqlDriver {
+  const value = nodeEnv().DATABASE_DRIVER?.toLowerCase();
+  if (value === 'postgres' || value === 'postgresql') return 'postgres';
+  if (value === 'mysql' || value === 'mysql2') return 'mysql';
+  return 'sqlite';
+}
 
 export function getDb() {
   if (!env.DB) {
@@ -12,10 +22,8 @@ export function getDb() {
   return drizzle(env.DB, { schema });
 }
 
-export function getD1(): D1Database {
-  if (!env.DB) {
-    throw new Error('Cloudflare D1 binding `DB` is unavailable.');
-  }
-
-  return env.DB;
+export function getD1(): PortableDatabase {
+  const databaseUrl = nodeEnv().DATABASE_URL;
+  if (env.DB) return createPortableDatabase(env.DB, 'sqlite');
+  return createPortableDatabase(undefined, configuredDriver(), databaseUrl);
 }
