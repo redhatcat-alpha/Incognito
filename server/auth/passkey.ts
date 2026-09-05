@@ -34,6 +34,22 @@ function buffer(bytes: Uint8Array): ArrayBuffer {
   return Uint8Array.from(bytes).buffer;
 }
 
+function derSignatureToRaw(signature: Uint8Array): Uint8Array {
+  if (signature[0] !== 0x30) throw new Error('PASSKEY_ASSERTION_INVALID');
+  let offset = 2;
+  if (signature[1] & 0x80) offset += signature[1] & 0x7f;
+  if (signature[offset++] !== 0x02) throw new Error('PASSKEY_ASSERTION_INVALID');
+  const rLength = signature[offset++];
+  const r = signature.slice(offset, offset + rLength); offset += rLength;
+  if (signature[offset++] !== 0x02) throw new Error('PASSKEY_ASSERTION_INVALID');
+  const sLength = signature[offset++];
+  const s = signature.slice(offset, offset + sLength);
+  const raw = new Uint8Array(64);
+  raw.set(r.slice(Math.max(0, r.length - 32)), 32 - Math.min(32, r.length));
+  raw.set(s.slice(Math.max(0, s.length - 32)), 64 - Math.min(32, s.length));
+  return raw;
+}
+
 async function sha256(value: BufferSource): Promise<Uint8Array> {
   return new Uint8Array(await crypto.subtle.digest('SHA-256', value));
 }
@@ -114,7 +130,7 @@ export async function verifyPasskeyAuthentication(input: {
   const signed = new Uint8Array(authenticatorData.length + clientHash.length);
   signed.set(authenticatorData); signed.set(clientHash, authenticatorData.length);
   const key = await crypto.subtle.importKey('spki', buffer(decode(credential.public_key)), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
-  const valid = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, buffer(decode(input.signature)), buffer(signed));
+  const valid = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, buffer(derSignatureToRaw(decode(input.signature))), buffer(signed));
   if (!valid) throw new Error('PASSKEY_ASSERTION_INVALID');
   await db.batch([
     db.prepare('UPDATE passkey_credentials SET sign_count = ?, last_used_at = ? WHERE id = ?').bind(signCount, Date.now(), credential.id),
