@@ -45,6 +45,33 @@ export function clearAdminCookie(request: Request): string {
 }
 
 const DEFAULT_SUPER_ADMIN = { username: 'admin', password: 'admin123' };
+let auditSchemaReady: Promise<void> | null = null;
+
+async function ensureAuditSchema(): Promise<void> {
+  if (!auditSchemaReady) {
+    auditSchemaReady = getD1()
+      .batch([
+        getD1().prepare(`CREATE TABLE IF NOT EXISTS admin_audit_logs (
+          id TEXT PRIMARY KEY NOT NULL,
+          admin_user_id TEXT NOT NULL,
+          action TEXT NOT NULL,
+          target_type TEXT,
+          target_id TEXT,
+          metadata_json TEXT,
+          created_at INTEGER NOT NULL,
+          FOREIGN KEY (admin_user_id) REFERENCES admin_users(id)
+        )`),
+        getD1().prepare('CREATE INDEX IF NOT EXISTS idx_admin_audit_created ON admin_audit_logs(created_at)'),
+        getD1().prepare('CREATE INDEX IF NOT EXISTS idx_admin_audit_admin ON admin_audit_logs(admin_user_id)'),
+      ])
+      .then(() => undefined)
+      .catch((error) => {
+        auditSchemaReady = null;
+        throw error;
+      });
+  }
+  await auditSchemaReady;
+}
 
 /**
  * 确保默认超级管理员存在（幂等）。只在首次建库/缺账号时写入，
@@ -120,6 +147,7 @@ export async function recordAdminAudit(input: {
   targetId?: string;
   metadata?: Record<string, string | number | boolean | null>;
 }): Promise<void> {
+  await ensureAuditSchema();
   await getD1()
     .prepare(
       `INSERT INTO admin_audit_logs
@@ -139,6 +167,7 @@ export async function recordAdminAudit(input: {
 }
 
 export async function listAdminAuditLogs(limit = 100) {
+  await ensureAuditSchema();
   const rows = await getD1()
     .prepare(
       `SELECT l.id, l.action, l.target_type, l.target_id, l.metadata_json, l.created_at,
