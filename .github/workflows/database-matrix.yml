@@ -50,3 +50,7 @@ jobs:
         env:
           DATABASE_DRIVER: ${{ matrix.driver }}
           DATABASE_URL: ${{ matrix.database_url }}
+      - run: npm run test:db-behavior
+        env:
+          DATABASE_DRIVER: ${{ matrix.driver }}
+          DATABASE_URL: ${{ matrix.database_url }}
