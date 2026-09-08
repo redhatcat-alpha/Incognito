@@ -229,7 +229,7 @@ export function ThreadView({ postId }: { postId: string }) {
 
   const flashTimers = useRef<number[]>([]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (): Promise<ThreadData | null> => {
     setLoading(true);
     try {
       const data = await apiJson<ThreadData>(`/api/v1/posts/${encodeURIComponent(postId)}`);
@@ -238,9 +238,11 @@ export function ThreadView({ postId }: { postId: string }) {
       readFloorRef.current = initial;
       setReadFloor(initial);
       setLoadError('');
+      return data;
     } catch (cause) {
       setLoadError(cause instanceof Error ? cause.message : '加载失败');
       setThread(null);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -294,6 +296,22 @@ export function ThreadView({ postId }: { postId: string }) {
       }
     },
     [thread, flashFloor],
+  );
+
+  const scrollToReplyId = useCallback(
+    (replyId: string, announce: boolean) => {
+      const target = document.getElementById(`floor-${replyId}`);
+      if (!target) return false;
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      target.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+      flashFloor(target);
+      if (announce) {
+        const live = document.getElementById('floor-announcer');
+        if (live) live.textContent = '已定位到刚发布的回复';
+      }
+      return true;
+    },
+    [flashFloor],
   );
 
   // 阅读进度：记录完整看过的最大楼层，5 秒防抖保存；离开页面时尽力补发。
@@ -450,17 +468,36 @@ export function ThreadView({ postId }: { postId: string }) {
     setSending(true);
     setNotice(null);
     try {
-      await apiJson(`/api/v1/posts/${encodeURIComponent(postId)}/replies`, {
+      const created = await apiJson<{ id: string; floorNo: number }>(`/api/v1/posts/${encodeURIComponent(postId)}/replies`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ body: draft.trim(), quoteReplyId: quote?.replyId ?? null, identity }),
       });
-      const newFloorNo = thread.totalFloors + 1;
       setDraft('');
       setQuote(null);
       setEditorNonce((value) => value + 1);
-      await load();
-      window.setTimeout(() => scrollToFloorNo(newFloorNo, true), 120);
+      const firstPage = await load();
+      let located = Boolean(firstPage?.replies.some((reply) => reply.id === created.id));
+      let nextPage = firstPage?.nextReplyPage ?? null;
+      // A newly created nested reply can be after the first 200 rows. Fetch
+      // pages until its stable public id is present before attempting to scroll.
+      while (!located && nextPage !== null) {
+        const page = await apiJson<ThreadData>(`/api/v1/posts/${encodeURIComponent(postId)}?replyPage=${nextPage}`);
+        setThread((current) => {
+          if (!current) return page;
+          const existing = new Set(current.replies.map((reply) => reply.id));
+          return {
+            ...current,
+            replies: [...current.replies, ...page.replies.filter((reply) => !existing.has(reply.id))],
+            nextReplyPage: page.nextReplyPage,
+          };
+        });
+        located = page.replies.some((reply) => reply.id === created.id);
+        nextPage = page.nextReplyPage ?? null;
+      }
+      window.setTimeout(() => {
+        if (!scrollToReplyId(created.id, true) && created.floorNo > 0) scrollToFloorNo(created.floorNo, true);
+      }, 120);
     } catch (cause) {
       setNotice({ tone: 'error', text: cause instanceof Error ? cause.message : '发布失败，请稍后重试' });
     } finally {

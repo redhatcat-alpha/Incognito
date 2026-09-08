@@ -702,7 +702,8 @@ export async function createReply(
   }
   await db.batch(statements);
 
-  return { id: publicId, floorNo: isDirect ? undefined : 0 };
+  const created = await db.prepare('SELECT floor_no FROM replies WHERE id = ? LIMIT 1').bind(id).first<{ floor_no: number }>();
+  return { id: publicId, floorNo: Number(created?.floor_no ?? 0) };
 }
 
 export async function updatePost(
