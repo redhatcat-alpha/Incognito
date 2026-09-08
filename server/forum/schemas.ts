@@ -109,3 +109,12 @@ export const loginSchema = z.object({
   username: usernameSchema,
   password: z.string().min(1, '请输入密码').max(72),
 });
+
+export const adminPasswordChangeSchema = z.object({
+  currentPassword: z.string().min(1, '请输入当前密码').max(72),
+  newPassword: z.string().min(8, '新密码至少 8 位').max(72),
+  confirmPassword: z.string().min(1, '请再次输入新密码').max(72),
+}).refine((input) => input.newPassword === input.confirmPassword, {
+  path: ['confirmPassword'],
+  message: '两次输入的新密码不一致',
+});

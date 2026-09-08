@@ -1,114 +1,156 @@
-# 无名岛（Incognito）
+# 无名岛 · Incognito
 
-> 匿名社区论坛 · 产品代号 Incognito
-> 首发形态：响应式 Web（Cloudflare Workers + D1）
-> 产品文档：[docs/PRD.md](docs/PRD.md)
+> 一个不要求手机号、邮箱或实名注册的匿名社区论坛。
 
-「无名岛」是一个无需手机号、邮箱或注册即可使用的匿名讨论社区：首次访问自动获得匿名会话，浏览、发帖、回帖、投票和举报都可直接完成；登录页 `/login` 提供可选的固定用户名身份。每条帖子与回复可选「匿名发言」（同一帖子内显示随机代号 匿名 A1、A2…，跨帖不暴露固定身份）或「以用户名发言」（登录后才可用）。阅读位置自动保存，下次打开可一键续读。
+[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A522.13-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Next.js compatible](https://img.shields.io/badge/Next.js-compatible-black?logo=next.js)](https://nextjs.org/)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![License](https://img.shields.io/badge/license-self--hosted-blue)](#许可)
 
-匿名是假名化而非密码学匿名：浏览历史、投票与内容归属挂在服务端随机账号上，以便续读与治理；用户可以随时查看、关闭同步、清空或彻底销毁身份。
+无名岛（Incognito）是一个以隐私为优先的讨论社区。用户首次访问时自动获得随机匿名身份，无需注册即可浏览、发帖、回复、投票和举报；同时支持可选的用户名账号，用于跨设备恢复自己的发言身份。
 
-## ✨ 已实现功能（PRD P0 用户端）
+## ✨ 功能
 
-- **匿名身份与会话**：首次访问自动创建；HttpOnly + SameSite=Lax 会话令牌（库中仅存哈希）；会话列表与撤销、退出当前设备、销毁身份（撤销全部会话、清除历史与投票、公开内容转删除占位并回滚投票计数）
-- **可选固定身份**：`/login` 独立登录/注册页；注册无需邮箱/手机号，用户名 + 密码即获唯一 ID（#编号）。未登录访客仍可完整浏览和匿名发言
-- **发言身份选择**：发帖与回复时可选「匿名发言」（帖内随机代号）或「以用户名发言」（跨帖展示固定用户名与 ID）；密码 PBKDF2 慢哈希存储、独立登录会话
-- **板块与帖子**：全部板块目录 `/boards`、板块页 `/b/[slug]`（只读/归档态提示）、首页（最新/热门/未读）；发帖（标题 4–120 字、正文 20k、0–5 个标签）
-- **帖子详情** `/t/[id]`：楼层与层内回复严格分层——楼层号只分配给直接回复楼主的层内容（1 楼=主帖，2、3…顺延），回复某层的“层内回复”不占楼号、折叠展示；主帖与层内容使用**所见即所得富文本编辑器**（加粗、斜体、删除线、行内代码、代码块、H2/H3、引用、列表、链接、**百度贴吧表情包**、撤销/重做）；层内回复**仅支持文字与贴吧表情包**（无其他格式），表情在折叠行内直接显示
-  - 内容格式：新内容以**受限 HTML** 存储（TipTap 输出，标签/属性白名单），展示前经 DOMPurify 二次清洗、`<img>` 仅放行 `/emoji/tieba/` 本地路径；历史 Markdown 内容由旧渲染器兼容展示（编辑旧内容时会自动转换并保存为新格式）
-  - 表情资源说明：104 个百度贴吧官方默认表情自托管于 `public/emoji/tieba/`；图片版权归百度所有，如需移除请删除目录并同步 `lib/tieba-emojis.ts`
-- **投票**：点赞/点踩/取消/切换状态机，数据库唯一约束一人一票，不能投自己；乐观更新 + 服务端回写
-- **阅读续接**：楼层锚点定位与高亮、「上次看到 N 楼 · 继续阅读」；IntersectionObserver 计算已读楼层，5 秒防抖 + 页面隐藏补发；单调合并，锚点被删自动回退
-- **浏览历史** `/history`：最近阅读、进度条、未读提醒、单条删除与清空；可在隐私设置中关闭云端同步（关闭即清除服务端历史）
-- **搜索** `/search`：标题与正文检索，板块/标签筛选，结果高亮
-- **隐私与设置**：`/settings/profile`（匿名身份、设备会话、退出）、`/settings/privacy`（历史同步开关、清空历史、销毁身份、数据类别说明）
-- **治理**：举报（七类原因、去重、防自举）、删除即占位、帖子/板块只读与锁定语义
-- **公告系统**：管理员在 `/admin` 后台发布/下架公告（级别 公告/提示/提醒/紧急，可设结束时间，含已读人数统计）；用户端以弹窗展示未读公告，点击「我知道了，不再显示」后按账号持久化、不再弹出（铃铛可查历史并补标已读）
-- **默认超级管理员**：`admin / admin123`（角色 `super_admin`，与普通注册用户分表分会话；管理控制台支持公告、站点设置、板块、标签与举报处理）。仅存 PBKDF2 哈希，**上线前必须修改默认密码**
-- 匿名数据边界：不收集邮箱/手机号/姓名/IP/完整 UA/浏览器指纹；公开 API 永不返回内部账号 ID
+- **匿名访问**：自动创建匿名会话，服务端不保存邮箱、手机号、姓名、IP 或完整 User-Agent。
+- **多板块论坛**：支持闲时吐槽、技术分享、热点八卦等板块，管理员可配置板块、标签、站点名称和 Logo。
+- **帖子与楼层**：主帖、楼主、直接楼层和层内回复分层展示；层内回复不占用楼层号。
+- **富文本与表情**：主帖和直接楼层支持所见即所得编辑器、代码块、引用、链接和贴吧表情；层内回复使用纯文字 + 表情模式。
+- **互动能力**：点赞、点踩、取消投票、标签、头像、举报和软删除。
+- **阅读续接**：自动保存浏览历史、已读楼层和锚点，下次打开帖子可继续阅读。
+- **管理员后台**：公告、站点设置、板块、标签、举报队列、审计日志和内容状态管理。
+- **可选注册账号**：用户名 + 密码注册，不影响匿名浏览和匿名发言；密码使用 PBKDF2-SHA256 存储。
+- **媒体上传**：支持本地文件上传、所有权校验、类型校验和 EXIF/元数据剥离；数据库保存对象相对路径。
 
-## 🚀 本地开发
+> 匿名身份是应用层的假名化设计，不等同于密码学匿名。为支持投票、历史同步和内容管理，服务端仍会保存随机账号关联的数据。详见 [PRD](docs/PRD.md)。
 
-要求 Node.js ≥ 22.13。
+## 🧱 技术栈
+
+- **应用**：Next.js App Router 兼容层（vinext）+ React 19 + TypeScript
+- **运行时**：Node.js 22 + Docker
+- **数据库**：默认本地 SQLite；支持 PostgreSQL、MySQL 运行时驱动
+- **数据访问**：Drizzle ORM、统一 SQL 兼容接口
+- **编辑器**：Tiptap
+- **样式与组件**：Tailwind CSS、Base UI、Lucide
+- **对象存储**：本地文件系统（媒体路径记录在数据库中）
+
+## 🚀 快速开始
+
+### 环境要求
+
+- Node.js `>=22.13.0`
+- npm
+
+### 安装与开发
 
 ```bash
+git clone https://github.com/redhatcat-alpha/Incognito.git
+cd Incognito
 npm install
-npm run dev        # http://localhost:3000（首次访问自动写入种子板块/帖子）
+npm run dev
 ```
 
-常用命令：
+打开 <http://localhost:3000>。首次请求会自动初始化 SQLite 数据库并写入种子数据。
 
-| 命令 | 说明 |
+默认管理员账号：
+
+```text
+用户名：admin
+密码：admin123
+```
+
+首次部署后请进入 `/admin`，在“修改管理员密码”区域立即修改默认密码。修改密码会撤销该管理员在其他设备上的会话。
+
+## 🛠️ 常用命令
+
+| 命令 | 用途 |
 | --- | --- |
-| `npm run dev` | 本地开发（vinext + 本地 D1） |
-| `npm run build` | 生产构建，产物输出到 `dist/` |
-| `npm start` | 用 wrangler 以本地 workerd 运行 `dist/` 产物 |
-| `npm run lint` / `npm run format` | oxlint / oxfmt |
-| `npm run db:generate` | drizzle-kit 生成迁移（`drizzle/*.sql`） |
+| `npm run dev` | 启动本地开发服务器 |
+| `npm run build` | 构建生产产物到 `dist/` |
+| `npm start` | 启动生产构建 |
+| `npm run lint` | 执行 Oxlint |
+| `npm run format` | 使用 Oxfmt 格式化代码 |
+| `npm run test` | 运行单元测试 |
+| `npm run test:smoke` | 运行 API 冒烟测试 |
+| `npm run test:db-behavior` | 验证数据库行为和并发楼层分配 |
+| `npm run db:generate` | 根据 schema 生成 Drizzle 迁移 |
+| `npm run db:migrate` | 执行 PostgreSQL/MySQL 迁移 |
 
-数据保存在本地 Miniflare D1（`.wrangler/state/`），属于本地文件，不入库。
+本地数据库默认位于 `data/incognito.sqlite`，媒体文件默认位于 `data/media/`；这两个目录都不应提交到 Git。
 
-### 数据库迁移
+## 🗄️ 数据库配置
+
+默认使用本地 SQLite。自托管环境可以通过环境变量选择 PostgreSQL 或 MySQL：
 
 ```bash
-npm run db:generate                      # 修改 db/schema.ts 后生成迁移
-# 本地 D1 应用迁移（示例）：
-npx wrangler d1 execute DB --local --file=drizzle/0001_xxx.sql
+DATABASE_DRIVER=sqlite   # sqlite | postgres | mysql
+DATABASE_URL=            # SQLite 文件路径，或 PostgreSQL/MySQL 连接串
+MEDIA_DIR=data/media     # 本地媒体根目录
 ```
 
-## 🐳 容器预览（本地/自托管）
+修改 [`db/schema.ts`](db/schema.ts) 后生成迁移：
 
-项目面向 Cloudflare Workers 部署；`deploy/` 提供容器化的本地预览方式（workerd + 本地 D1），方便在无 Cloudflare 账号的环境里体验：
+```bash
+npm run db:generate
+```
+
+数据库选择是部署级配置，不支持同一实例运行期间热切换。SQLite 适合本地开发、演示和低并发单实例；公共生产环境可根据规模选择 PostgreSQL 或 MySQL。
+
+## 🐳 Docker 部署
+
+项目使用 Docker 自托管，数据库和媒体文件通过 `/app/data` 持久化：
 
 ```bash
 docker compose -f deploy/docker-compose.yaml up --build
-# 打开 http://localhost:3000
 ```
 
-数据目录挂载在匿名卷 `.wrangler`（Miniflare D1 状态），重建容器不丢数据。
+打开 <http://localhost:3000>，首次部署后修改管理员默认密码。
 
-## ☁️ 部署到 Cloudflare
+停止服务但保留数据：`docker compose -f deploy/docker-compose.yaml down`。
+删除容器及数据卷：`docker compose -f deploy/docker-compose.yaml down -v`。
 
-1. 准备 Cloudflare 账号与 D1 数据库：`wrangler d1 create incognito-db`
-2. 将 `.openai/hosting.json` 中的 `d1`（当前 `DB`）指向真实数据库 ID；如需图片上传另配 R2（`FILES`）
-3. 对线上 D1 执行迁移（`drizzle/0000_*.sql`、`drizzle/0001_*.sql`）
-4. 构建并部署（vinext / wrangler 会使用托管配置）
-
-> 注意：SQLite/D1 单实例适用于个人站与低流量；PRD 建议公共高并发部署使用 PostgreSQL/MySQL，仓库当前为 D1 方言（`db/schema.ts`），切换数据库属离线迁移，需另行引入方言层。
-
-### Node 数据库驱动
-
-领域服务现在通过统一的 SQL 兼容接口运行。自托管 Node 环境可设置 `DATABASE_DRIVER=postgres` 或 `DATABASE_DRIVER=mysql`，并提供对应的 `DATABASE_URL`；未设置时继续使用 Cloudflare D1/SQLite。迁移命令为 `npm run db:migrate`（PostgreSQL/MySQL），会按文件名幂等记录已执行版本；生产切库前仍需完成数据校验与 CI 矩阵验证。
-
-## 🗂 项目结构
+## 📁 项目结构
 
 ```text
-app/                    # Next.js App Router 页面与 /api/v1 路由
-  api/v1/               # REST：posts/replies/votes/history/search/reports/announcements/boards/anon/*
-  b/[slug] · t/[id] · boards · history · search · settings/* · rules
-components/forum/       # 论坛 UI：壳层、首页、帖子详情、历史、搜索、设置等
-components/ui/          # shadcn/base-ui 组件（脚手架）
-db/                     # D1 schema 与连接
-drizzle/                # 生成的迁移 SQL
-server/
-  auth/anonymous.ts     # 匿名会话（token 哈希、cookie、撤销）
-  forum/service.ts      # 领域服务（论坛/投票/历史/搜索/举报/身份）
-  forum/schemas.ts      # zod 校验（前后端共享常量见 lib/）
-  forum/seed.ts         # 种子数据
-  http.ts               # 响应信封与稳定错误码
-lib/                    # 客户端 API、类型、格式化、共享常量
-docs/PRD.md             # 产品需求文档 v1.0
-deploy/                 # 容器化本地预览（Dockerfile / compose）
+app/                    # 页面与 /api/v1 路由
+components/forum/       # 论坛 UI、帖子详情、历史和设置
+components/admin/       # 管理后台 UI
+db/                     # 数据库 schema 与连接
+drizzle/                # 数据库迁移 SQL
+server/auth/            # 匿名、注册用户和管理员会话
+server/forum/           # 论坛领域服务与校验
+lib/                    # 客户端 API、类型和共享常量
+public/emoji/tieba/     # 自托管贴吧表情资源
+scripts/                # 迁移、冒烟和数据库行为脚本
+docs/PRD.md             # 完整产品需求文档
+deploy/                 # 本地容器预览配置
 ```
 
-## 🧭 剩余路线（对照 PRD P0 缺口）
+## 🔐 隐私与内容安全边界
 
-- 管理后台 `/admin/*`：公告、站点设置、板块、标签、表情资源、举报队列、举报处理与审计日志已实现
-- 图片/头像上传已支持 R2、上传意图/完成确认、所有权校验、过期状态、类型校验与 EXIF/元数据剥离；真实重编码、病毒扫描、缩略图变体与后台处理队列仍待实现
-- 恢复短语与 Passkey/WebAuthn 跨设备恢复已实现；上线前需在目标浏览器完成真实设备验收
-- 帖子列表与单帖楼层均支持分页加载（楼层每页 200 条）；需继续进行极大线程性能压测
-- PostgreSQL/MySQL 运行时适配、SQLite 方言归一化、迁移命令与 GitHub Actions 空库迁移矩阵已实现；CI 已加入并发楼层号行为测试，完整唯一约束/高并发压测仍待补齐
+- 公开 DTO 不返回内部 `user_id`，线程内匿名代号跨帖子不可直接关联。
+- 删除采用软删除，楼层号不会重排；销毁身份会撤销会话、清理历史与投票，并将公开内容转为占位内容。
+- 所有富文本展示经过白名单过滤；图片仅允许本地贴吧表情路径。
+- 投票、举报和楼层分配由服务端约束，不能投自己或重复举报同一目标。
 
-## 📜 许可与说明
+## 🧪 提交前检查
 
-代码与文档供学习与自托管使用。上线前请阅读 [docs/PRD.md](docs/PRD.md) 第 23 节：需由运营与合规确认服务地区法律、内容政策、删除周期等业务参数，方可宣称合规。
+```bash
+npm run lint
+npx tsc --noEmit
+npm run build
+npm run test
+npm run test:smoke
+```
+
+## 📚 文档
+
+- [产品需求文档（PRD）](docs/PRD.md)
+- [工程约定](AGENTS.md)
+
+## 🗺️ 当前状态
+
+核心论坛、匿名会话、可选注册身份、投票、举报、历史续读、公告、管理后台、本地媒体上传和三种数据库驱动适配已实现。以下工作仍建议在正式上线前完成：真实设备上的 Passkey 验收、极大线程性能压测、三数据库完整迁移/并发矩阵，以及媒体缩略图和后台处理队列。
+
+## 📜 许可
+
+本项目当前未声明标准开源许可证，代码与文档用于学习和自托管。若要公开分发，请先补充许可证文件，并根据部署地区完成内容治理、隐私政策和数据删除周期审查。

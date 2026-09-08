@@ -1,16 +1,13 @@
 #!/usr/bin/env node
-/** Apply the checked-in migrations to a selected Node SQL database. */
-import { readFile } from 'node:fs/promises';
-import { readdir } from 'node:fs/promises';
-import { join } from 'node:path';
+/** Apply checked-in migrations to SQLite, PostgreSQL, or MySQL. */
+import { DatabaseSync } from 'node:sqlite';
+import { mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 
 const driver = (process.env.DATABASE_DRIVER ?? 'sqlite').toLowerCase();
-const url = process.env.DATABASE_URL;
-if (driver === 'sqlite') {
-  console.error('SQLite/D1 migrations are applied with Wrangler; set DATABASE_DRIVER=postgres or mysql for this command.');
-  process.exit(1);
-}
-if (!url) throw new Error('DATABASE_URL is required');
+const url = process.env.DATABASE_URL || 'data/incognito.sqlite';
+const migrationDir = join(process.cwd(), 'drizzle');
+const files = readdirSync(migrationDir).filter((file) => /^\d{4}_.*\.sql$/.test(file)).sort();
 
 function statements(source) {
   return source
@@ -20,11 +17,7 @@ function statements(source) {
 }
 
 function translate(source) {
-  if (driver === 'postgres') {
-    return source
-      .replaceAll('`', '')
-      .replace(/\b(integer|text)\b/g, (type) => type.toLowerCase() === 'text' ? 'text' : 'integer');
-  }
+  if (driver === 'postgres') return source.replaceAll('`', '');
   return source
     .replace(/`([^`]+)` text PRIMARY KEY/gi, '`$1` varchar(255) PRIMARY KEY')
     .replace(/`(id|user_id|post_id|board_id|target_id|public_id|quote_reply_id|token_hash|phrase_hash|slug|username|status|level|scope|action|target_type)` text/gi, '`$1` varchar(255)')
@@ -33,19 +26,38 @@ function translate(source) {
     .replace(/`([^`]+)` text/gi, '`$1` longtext');
 }
 
-const migrationDir = join(process.cwd(), 'drizzle');
-const files = (await readdir(migrationDir)).filter((file) => /^\d{4}_.*\.sql$/.test(file)).sort();
+if (driver === 'sqlite') {
+  const path = resolve(url);
+  mkdirSync(dirname(path), { recursive: true });
+  const db = new DatabaseSync(path, { timeout: 5000 });
+  db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
+  db.exec('CREATE TABLE IF NOT EXISTS _incognito_migrations (name TEXT PRIMARY KEY NOT NULL, applied_at INTEGER NOT NULL)');
+  for (const file of files) {
+    if (db.prepare('SELECT name FROM _incognito_migrations WHERE name = ?').get(file)) continue;
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      for (const statement of statements(readFileSync(join(migrationDir, file), 'utf8'))) db.exec(statement);
+      db.prepare('INSERT INTO _incognito_migrations (name, applied_at) VALUES (?, ?)').run(file, Date.now());
+      db.exec('COMMIT');
+      console.log(`applied ${file}`);
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+  process.exit(0);
+}
+
+if (!['postgres', 'mysql'].includes(driver) || !process.env.DATABASE_URL) throw new Error('DATABASE_DRIVER and DATABASE_URL are required for PostgreSQL/MySQL');
 let client;
 if (driver === 'postgres') {
   const module = await import('postgres');
-  client = module.default(url);
+  client = module.default(process.env.DATABASE_URL);
   await client.unsafe('CREATE TABLE IF NOT EXISTS incognito_schema_migrations (id varchar(255) PRIMARY KEY, applied_at bigint NOT NULL)');
-} else if (driver === 'mysql') {
-  const module = await import('mysql2/promise');
-  client = await module.createConnection(url);
-  await client.execute('CREATE TABLE IF NOT EXISTS incognito_schema_migrations (id varchar(255) PRIMARY KEY, applied_at BIGINT NOT NULL)');
 } else {
-  throw new Error(`Unsupported DATABASE_DRIVER: ${driver}`);
+  const module = await import('mysql2/promise');
+  client = await module.createConnection(process.env.DATABASE_URL);
+  await client.execute('CREATE TABLE IF NOT EXISTS incognito_schema_migrations (id varchar(255) PRIMARY KEY, applied_at BIGINT NOT NULL)');
 }
 
 async function query(sql, values = []) {
@@ -60,11 +72,10 @@ async function query(sql, values = []) {
 for (const file of files) {
   const applied = await query('SELECT id FROM incognito_schema_migrations WHERE id = ?', [file]);
   if (applied.length) continue;
-  const source = translate(await readFile(join(migrationDir, file), 'utf8'));
   if (driver === 'postgres') await client.unsafe('BEGIN');
   else await client.beginTransaction();
   try {
-    for (const statement of statements(source)) await query(statement);
+    for (const statement of statements(translate(readFileSync(join(migrationDir, file), 'utf8')))) await query(statement);
     await query('INSERT INTO incognito_schema_migrations (id, applied_at) VALUES (?, ?)', [file, Date.now()]);
     if (driver === 'postgres') await client.unsafe('COMMIT');
     else await client.commit();
@@ -75,6 +86,4 @@ for (const file of files) {
     throw error;
   }
 }
-
-if (driver === 'postgres') await client.end();
-else await client.end();
+await client.end();

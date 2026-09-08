@@ -1,7 +1,7 @@
 /**
  * Small compatibility layer for the SQL subset used by the forum services.
- * D1 remains the default on Workers; Node deployments can select postgres or
- * mysql2 with DATABASE_DRIVER/DATABASE_URL without changing domain queries.
+ * The forum service uses this small adapter so the same domain queries work
+ * with local SQLite, PostgreSQL, or MySQL.
  */
 export type SqlDriver = 'sqlite' | 'postgres' | 'mysql';
 
@@ -19,17 +19,47 @@ export interface PortableDatabase {
   batch(statements: PreparedStatement[]): Promise<QueryResult[]>;
 }
 
-type D1Like = {
-  prepare(query: string): D1LikeStatement;
-  batch(statements: D1LikeStatement[]): Promise<QueryResult[]>;
-};
-type D1LikeStatement = PreparedStatement;
+type SqliteDatabase = import('node:sqlite').DatabaseSync;
+type SqliteStatement = import('node:sqlite').StatementSync;
 
-class D1Adapter implements PortableDatabase {
-  private readonly db: D1Like;
-  constructor(db: D1Like) { this.db = db; }
-  prepare(query: string): PreparedStatement { return this.db.prepare(query); }
-  batch(statements: PreparedStatement[]): Promise<QueryResult[]> { return this.db.batch(statements as D1LikeStatement[]); }
+class SqliteNodeStatement implements PreparedStatement {
+  private values: unknown[] = [];
+  private readonly statement: SqliteStatement;
+  constructor(statement: SqliteStatement) { this.statement = statement; }
+  bind(...values: unknown[]): PreparedStatement {
+    this.values = values;
+    return this;
+  }
+  async all<T extends Record<string, unknown>>(): Promise<{ results: T[] }> {
+    return { results: this.statement.all(...this.values as never[]) as T[] };
+  }
+  async first<T extends Record<string, unknown>>(): Promise<T | null> {
+    return (this.statement.get(...this.values as never[]) as T | undefined) ?? null;
+  }
+  async run(): Promise<QueryResult> {
+    const result = this.statement.run(...this.values as never[]);
+    return { results: [], meta: { changes: Number(result.changes ?? 0) } };
+  }
+}
+
+export class SqliteNodeAdapter implements PortableDatabase {
+  private readonly db: SqliteDatabase;
+  constructor(db: SqliteDatabase) { this.db = db; }
+  prepare(query: string): PreparedStatement {
+    return new SqliteNodeStatement(this.db.prepare(query));
+  }
+  async batch(statements: PreparedStatement[]): Promise<QueryResult[]> {
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const results: QueryResult[] = [];
+      for (const statement of statements) results.push(await statement.run());
+      this.db.exec('COMMIT');
+      return results;
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+  }
 }
 
 type PostgresClient = ((strings: TemplateStringsArray, ...values: unknown[]) => Promise<Record<string, unknown>[]>) & {
@@ -54,8 +84,8 @@ function postgresPlaceholders(query: string): string {
 }
 
 /**
- * The forum service intentionally uses the D1/SQLite SQL dialect. Keep that
- * API portable for the optional Node PostgreSQL/MySQL adapters by translating
+ * The forum service intentionally uses SQLite-compatible SQL. Keep that API
+ * portable for the PostgreSQL/MySQL adapters by translating
  * the handful of SQLite-only write forms at the adapter boundary.
  */
 export function normalizeNodeSql(query: string, driver: Exclude<SqlDriver, 'sqlite'>): string {
@@ -156,11 +186,7 @@ export class NodeAdapter implements PortableDatabase {
   }
 }
 
-export function createPortableDatabase(envDb: D1Like | undefined, driver: SqlDriver, url?: string): PortableDatabase {
-  if (driver === 'sqlite' || envDb) {
-    if (!envDb) throw new Error('DATABASE_URL is required when DATABASE_DRIVER is sqlite outside Workers');
-    return new D1Adapter(envDb);
-  }
+export function createPortableDatabase(driver: Exclude<SqlDriver, 'sqlite'>, url?: string): PortableDatabase {
   if (!url) throw new Error('DATABASE_URL is required for PostgreSQL/MySQL');
   return new NodeAdapter(driver, url);
 }

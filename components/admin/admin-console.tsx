@@ -43,6 +43,11 @@ export function AdminConsole() {
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState('');
   const [notice, setNotice] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
 
   const [list, setList] = useState<AdminAnnouncement[]>([]);
   const [reports, setReports] = useState<AdminReport[]>([]);
@@ -145,6 +150,31 @@ export function AdminConsole() {
       setPublishError(cause instanceof Error ? cause.message : '发布失败');
     } finally {
       setPublishing(false);
+    }
+  }
+
+  async function changePassword(event: { preventDefault: () => void }) {
+    event.preventDefault();
+    if (newPassword !== confirmPassword) {
+      setPasswordError('两次输入的新密码不一致');
+      return;
+    }
+    setChangingPassword(true);
+    setPasswordError('');
+    try {
+      await apiJson('/api/v1/admin/password', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
+      });
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      flash('管理员密码已修改');
+    } catch (cause) {
+      setPasswordError(cause instanceof Error ? cause.message : '密码修改失败');
+    } finally {
+      setChangingPassword(false);
     }
   }
 
@@ -305,6 +335,31 @@ export function AdminConsole() {
             <div className="flex justify-end">
               <Button type="submit" disabled={publishing || !title.trim() || !body.trim()} className="gap-2 rounded-full">
                 <Send className="size-4" />{publishing ? '发布中…' : '发布公告'}
+              </Button>
+            </div>
+          </form>
+        </section>
+
+        <section className="rounded-2xl border border-black/10 bg-white p-6">
+          <h2 className="text-lg font-black tracking-tight">修改管理员密码</h2>
+          <p className="mt-1 text-sm text-muted-foreground">修改后当前登录会话保持有效，其他设备需要使用新密码重新登录。</p>
+          <form onSubmit={(event) => void changePassword(event)} className="mt-5 grid gap-4 sm:max-w-xl">
+            <label htmlFor="admin-current-password" className="grid gap-1.5 text-sm font-bold">
+              当前密码
+              <Input id="admin-current-password" type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className="h-11 border-black/15 bg-white" autoComplete="current-password" required />
+            </label>
+            <label htmlFor="admin-new-password" className="grid gap-1.5 text-sm font-bold">
+              新密码 <span className="font-normal text-muted-foreground">至少 8 位</span>
+              <Input id="admin-new-password" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="h-11 border-black/15 bg-white" autoComplete="new-password" minLength={8} required />
+            </label>
+            <label htmlFor="admin-confirm-password" className="grid gap-1.5 text-sm font-bold">
+              确认新密码
+              <Input id="admin-confirm-password" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="h-11 border-black/15 bg-white" autoComplete="new-password" minLength={8} required />
+            </label>
+            {passwordError ? <p role="alert" className="text-sm font-semibold text-destructive">{passwordError}</p> : null}
+            <div className="flex justify-end">
+              <Button type="submit" disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword} className="rounded-full">
+                {changingPassword ? '修改中…' : '修改密码'}
               </Button>
             </div>
           </form>

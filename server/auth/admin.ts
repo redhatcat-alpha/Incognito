@@ -122,6 +122,26 @@ export async function loginAdmin(
   };
 }
 
+export async function changeAdminPassword(input: { currentPassword: string; newPassword: string }, request: Request): Promise<void> {
+  const admin = await requireAdminUser(request);
+  const row = await getD1()
+    .prepare('SELECT pass_hash FROM admin_users WHERE id = ? LIMIT 1')
+    .bind(admin.id)
+    .first<{ pass_hash: string }>();
+  if (!row || !(await verifyPassword(input.currentPassword, row.pass_hash))) throw new Error('ADMIN_CURRENT_PASSWORD_INVALID');
+  const passHash = await hashPassword(input.newPassword);
+  await getD1().prepare('UPDATE admin_users SET pass_hash = ? WHERE id = ?').bind(passHash, admin.id).run();
+  const currentToken = readCookie(request, COOKIE_NAME);
+  if (currentToken) {
+    const currentTokenHash = await hashToken(currentToken);
+    await getD1()
+      .prepare('UPDATE admin_sessions SET revoked_at = ? WHERE user_id = ? AND token_hash <> ? AND revoked_at IS NULL')
+      .bind(Date.now(), admin.id, currentTokenHash)
+      .run();
+  }
+  await recordAdminAudit({ adminUserId: admin.id, action: 'admin.password_change' });
+}
+
 export async function getAdminUser(request: Request): Promise<AdminUser | null> {
   const token = readCookie(request, COOKIE_NAME);
   if (!token) return null;

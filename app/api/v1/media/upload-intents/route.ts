@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { env } from 'cloudflare:workers';
 
 import { ensureAnonymousSession, applySessionCookie } from '@/server/auth/anonymous';
 import { getD1 } from '@/db';
@@ -9,7 +8,6 @@ import { extensionForContentType, MEDIA_INTENT_TTL_MS, MEDIA_MAX_BYTES } from '@
 export async function POST(request: Request) {
   try {
     const session = await ensureAnonymousSession(request);
-    if (!env.FILES) throw new Error('MEDIA_STORAGE_UNAVAILABLE');
     const input = (await request.json()) as { contentType?: unknown; size?: unknown };
     const contentType = typeof input.contentType === 'string' ? input.contentType : '';
     const size = typeof input.size === 'number' && Number.isInteger(input.size) ? input.size : 0;
