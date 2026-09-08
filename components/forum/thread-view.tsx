@@ -229,8 +229,9 @@ export function ThreadView({ postId }: { postId: string }) {
 
   const flashTimers = useRef<number[]>([]);
 
-  const load = useCallback(async (): Promise<ThreadData | null> => {
-    setLoading(true);
+  const load = useCallback(async (options?: { preserveContent?: boolean }): Promise<ThreadData | null> => {
+    const preserveContent = options?.preserveContent === true;
+    if (!preserveContent) setLoading(true);
     try {
       const data = await apiJson<ThreadData>(`/api/v1/posts/${encodeURIComponent(postId)}`);
       setThread(data);
@@ -241,10 +242,10 @@ export function ThreadView({ postId }: { postId: string }) {
       return data;
     } catch (cause) {
       setLoadError(cause instanceof Error ? cause.message : '加载失败');
-      setThread(null);
+      if (!preserveContent) setThread(null);
       return null;
     } finally {
-      setLoading(false);
+      if (!preserveContent) setLoading(false);
     }
   }, [postId]);
 
@@ -315,7 +316,7 @@ export function ThreadView({ postId }: { postId: string }) {
           // first visible floor when the requested target is not rendered.
           scrollToFloorNo(floorNo, true);
         }
-      }, 500);
+      }, 300);
     },
     [flashFloor, scrollToFloorNo],
   );
@@ -482,7 +483,7 @@ export function ThreadView({ postId }: { postId: string }) {
       setDraft('');
       setQuote(null);
       setEditorNonce((value) => value + 1);
-      const firstPage = await load();
+      const firstPage = await load({ preserveContent: true });
       let located = Boolean(firstPage?.replies.some((reply) => reply.id === created.id));
       let nextPage = firstPage?.nextReplyPage ?? null;
       // A newly created nested reply can be after the first 200 rows. Fetch
@@ -501,9 +502,7 @@ export function ThreadView({ postId }: { postId: string }) {
         located = page.replies.some((reply) => reply.id === created.id);
         nextPage = page.nextReplyPage ?? null;
       }
-      window.setTimeout(() => {
-        scrollToReplyId(created.id, created.floorNo);
-      }, 120);
+      scrollToReplyId(created.id, created.floorNo);
     } catch (cause) {
       setNotice({ tone: 'error', text: cause instanceof Error ? cause.message : '发布失败，请稍后重试' });
     } finally {
