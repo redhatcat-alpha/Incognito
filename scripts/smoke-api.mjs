@@ -19,6 +19,12 @@ const replies = await Promise.all(Array.from({ length: 3 }, (_, index) => call(`
 const floors = replies.map((reply) => reply.floorNo).filter((floor) => floor > 0);
 if (new Set(floors).size !== floors.length) throw new Error('reply floor collision');
 await call(`/api/v1/history/${post.id}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ maxReadFloor: 1, anchorReplyId: null }) });
+const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130]);
+const intent = await call('/api/v1/media/upload-intents', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ contentType: 'image/png', size: png.byteLength }) });
+const uploaded = await call(intent.uploadUrl, { method: 'PUT', headers: { 'content-type': 'image/png', 'content-length': String(png.byteLength) }, body: png });
+if (uploaded.status !== 'uploaded') throw new Error('media upload state invalid');
+const completed = await call(intent.completeUrl, { method: 'POST' });
+if (completed.status !== 'ready' || !completed.url) throw new Error('media completion invalid');
 const phrase = await call('/api/v1/anon/recovery', { method: 'POST' });
 if (!phrase.phrase || phrase.phrase.split(' ').length !== 6) throw new Error('recovery phrase invalid');
 const passkeyOptions = await call('/api/v1/anon/passkey/auth/options', { method: 'POST' });
