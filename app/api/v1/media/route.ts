@@ -1,36 +1,33 @@
 import { NextResponse } from 'next/server';
 import { env } from 'cloudflare:workers';
 
-import { ensureAnonymousSession } from '@/server/auth/anonymous';
+import { applySessionCookie, ensureAnonymousSession } from '@/server/auth/anonymous';
+import { getD1 } from '@/db';
 import { jsonError } from '@/server/http';
-import { stripJpegExif, stripPngMetadata, stripWebpMetadata } from '@/lib/media';
-
-const ALLOWED = new Map([
-  ['image/jpeg', 'jpg'],
-  ['image/png', 'png'],
-  ['image/webp', 'webp'],
-]);
-const MAX_BYTES = 2 * 1024 * 1024;
+import { extensionForContentType, hasValidSignature, MEDIA_MAX_BYTES, stripMediaMetadata, type MediaExtension } from '@/server/media';
 
 export async function POST(request: Request) {
   try {
-    await ensureAnonymousSession(request);
+    const session = await ensureAnonymousSession(request);
     if (!env.FILES) throw new Error('MEDIA_STORAGE_UNAVAILABLE');
     const form = await request.formData();
     const file = form.get('file');
     if (!(file instanceof File)) throw new Error('MEDIA_FILE_REQUIRED');
-    const extension = ALLOWED.get(file.type);
-    if (!extension || file.size > MAX_BYTES) throw new Error('MEDIA_FILE_INVALID');
+    const extension = extensionForContentType(file.type);
+    if (!extension || file.size > MEDIA_MAX_BYTES) throw new Error('MEDIA_FILE_INVALID');
     const bytes = new Uint8Array(await file.slice(0, 12).arrayBuffer());
-    const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
-    const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
-    const isWebp = bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
-    if ((extension === 'jpg' && !isJpeg) || (extension === 'png' && !isPng) || (extension === 'webp' && !isWebp)) throw new Error('MEDIA_FILE_INVALID');
+    if (!hasValidSignature(bytes, extension)) throw new Error('MEDIA_FILE_INVALID');
     const id = crypto.randomUUID();
     const key = `uploads/${id}.${extension}`;
     const source = new Uint8Array(await file.arrayBuffer());
-    const stored = extension === 'jpg' ? stripJpegExif(source) : extension === 'png' ? stripPngMetadata(source) : stripWebpMetadata(source);
+    const stored = stripMediaMetadata(source, extension as MediaExtension);
+    const now = Date.now();
+    await getD1().prepare(`INSERT INTO media_uploads (id, owner_id, object_key, content_type, extension, size, status, created_at, expires_at, completed_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'processing', ?, ?, ?)`)
+      .bind(id, session.userId, key, file.type, extension, stored.byteLength, now, now, now).run();
     await env.FILES.put(key, stored, { httpMetadata: { contentType: file.type, cacheControl: 'public, max-age=31536000, immutable' }, customMetadata: { uploadedAt: new Date().toISOString(), exifStripped: extension === 'jpg' ? 'true' : 'not-applicable' } });
-    return NextResponse.json({ data: { id, url: `/api/v1/media/${id}`, contentType: file.type, size: stored.byteLength }, error: null }, { status: 201 });
+    await getD1().prepare("UPDATE media_uploads SET status = 'ready' WHERE id = ? AND owner_id = ?").bind(id, session.userId).run();
+    const response = NextResponse.json({ data: { id, url: `/api/v1/media/${id}`, contentType: file.type, size: stored.byteLength, status: 'ready' }, error: null }, { status: 201 });
+    return applySessionCookie(response, session);
   } catch (error) { return jsonError(error); }
 }

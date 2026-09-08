@@ -182,6 +182,27 @@ export const replies = sqliteTable(
   ],
 );
 
+/** Upload intents keep media ownership and lifecycle state in the database. */
+export const mediaUploads = sqliteTable(
+  'media_uploads',
+  {
+    id: text('id').primaryKey(),
+    ownerId: text('owner_id').notNull().references(() => anonymousUsers.id),
+    objectKey: text('object_key').notNull(),
+    contentType: text('content_type').notNull(),
+    extension: text('extension').notNull(),
+    size: integer('size').notNull().default(0),
+    status: text('status').notNull().default('pending'),
+    createdAt: integer('created_at').notNull(),
+    expiresAt: integer('expires_at').notNull(),
+    completedAt: integer('completed_at'),
+  },
+  (table) => [
+    index('idx_media_uploads_owner_created').on(table.ownerId, table.createdAt),
+    index('idx_media_uploads_status_expiry').on(table.status, table.expiresAt),
+  ],
+);
+
 export const threadAliases = sqliteTable(
   'thread_aliases',
   {
