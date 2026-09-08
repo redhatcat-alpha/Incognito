@@ -282,11 +282,12 @@ export function ThreadView({ postId }: { postId: string }) {
 
   const scrollToFloorNo = useCallback(
     (floorNo: number, announce: boolean) => {
-      const floor = Math.max(1, Math.min(floorNo, thread?.totalFloors ?? 1));
-      const target =
-        document.querySelector<HTMLElement>(`[data-floor-no="${floor}"]`) ??
-        document.querySelector<HTMLElement>('[data-floor-no]');
-      if (!target) return;
+      // Do not clamp against the currently loaded total: after publishing a
+      // reply that value can still be stale, and clamping would target an
+      // older floor instead of the newly created one.
+      const floor = Math.max(1, floorNo);
+      const target = document.querySelector<HTMLElement>(`[data-floor-no="${floor}"]`);
+      if (!target) return false;
       const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       target.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
       flashFloor(target);
@@ -294,24 +295,29 @@ export function ThreadView({ postId }: { postId: string }) {
         const live = document.getElementById('floor-announcer');
         if (live) live.textContent = `已跳转到 ${floor} 楼`;
       }
-    },
-    [thread, flashFloor],
-  );
-
-  const scrollToReplyId = useCallback(
-    (replyId: string, announce: boolean) => {
-      const target = document.getElementById(`floor-${replyId}`);
-      if (!target) return false;
-      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      target.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
-      flashFloor(target);
-      if (announce) {
-        const live = document.getElementById('floor-announcer');
-        if (live) live.textContent = '已定位到刚发布的回复';
-      }
       return true;
     },
     [flashFloor],
+  );
+
+  const scrollToReplyId = useCallback(
+    (replyId: string, floorNo: number) => {
+      window.setTimeout(() => {
+        const target = document.getElementById(`floor-${replyId}`);
+        if (target) {
+          const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          target.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+          flashFloor(target);
+          const live = document.getElementById('floor-announcer');
+          if (live) live.textContent = '已定位到刚发布的回复';
+        } else if (floorNo > 0) {
+          // Only use the exact floor as a final fallback. Never scroll to the
+          // first visible floor when the requested target is not rendered.
+          scrollToFloorNo(floorNo, true);
+        }
+      }, 500);
+    },
+    [flashFloor, scrollToFloorNo],
   );
 
   // 阅读进度：记录完整看过的最大楼层，5 秒防抖保存；离开页面时尽力补发。
@@ -496,7 +502,7 @@ export function ThreadView({ postId }: { postId: string }) {
         nextPage = page.nextReplyPage ?? null;
       }
       window.setTimeout(() => {
-        if (!scrollToReplyId(created.id, true) && created.floorNo > 0) scrollToFloorNo(created.floorNo, true);
+        scrollToReplyId(created.id, created.floorNo);
       }, 120);
     } catch (cause) {
       setNotice({ tone: 'error', text: cause instanceof Error ? cause.message : '发布失败，请稍后重试' });
