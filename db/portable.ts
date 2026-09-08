@@ -26,7 +26,8 @@ type D1Like = {
 type D1LikeStatement = PreparedStatement;
 
 class D1Adapter implements PortableDatabase {
-  constructor(private readonly db: D1Like) {}
+  private readonly db: D1Like;
+  constructor(db: D1Like) { this.db = db; }
   prepare(query: string): PreparedStatement { return this.db.prepare(query); }
   batch(statements: PreparedStatement[]): Promise<QueryResult[]> { return this.db.batch(statements as D1LikeStatement[]); }
 }
@@ -52,9 +53,46 @@ function postgresPlaceholders(query: string): string {
   return query.replaceAll('?', () => `$${++index}`);
 }
 
+/**
+ * The forum service intentionally uses the D1/SQLite SQL dialect. Keep that
+ * API portable for the optional Node PostgreSQL/MySQL adapters by translating
+ * the handful of SQLite-only write forms at the adapter boundary.
+ */
+export function normalizeNodeSql(query: string, driver: Exclude<SqlDriver, 'sqlite'>): string {
+  let normalized = query;
+
+  // SQLite's scalar MAX(a, b) is called GREATEST(a, b) by PostgreSQL/MySQL.
+  normalized = normalized.replace(/\bMAX\(0,\s*/g, 'GREATEST(0, ');
+  normalized = normalized.replace(/\bMAX\(browsing_history\.max_read_floor,\s*excluded\.max_read_floor\)/g, 'GREATEST(browsing_history.max_read_floor, excluded.max_read_floor)');
+
+  if (driver === 'postgres') {
+    // PostgreSQL supports ON CONFLICT, but not SQLite's INSERT OR IGNORE.
+    if (/\bINSERT\s+OR\s+IGNORE\s+INTO\b/i.test(normalized)) {
+      normalized = normalized.replace(/\bINSERT\s+OR\s+IGNORE\s+INTO\b/i, 'INSERT INTO');
+      normalized = `${normalized.trimEnd()} ON CONFLICT DO NOTHING`;
+    }
+    return normalized;
+  }
+
+  // MySQL uses INSERT IGNORE and ON DUPLICATE KEY UPDATE for the equivalent
+  // operations. These are the two upserts used by the service layer.
+  normalized = normalized.replace(/\bINSERT\s+OR\s+IGNORE\s+INTO\b/gi, 'INSERT IGNORE INTO');
+  normalized = normalized.replace(
+    /ON\s+CONFLICT\(user_id,\s*target_type,\s*target_id\)\s*DO\s+UPDATE\s+SET\s+value\s*=\s*excluded\.value,\s*updated_at\s*=\s*excluded\.updated_at/gi,
+    'ON DUPLICATE KEY UPDATE value = VALUES(value), updated_at = VALUES(updated_at)',
+  );
+  normalized = normalized.replace(
+    /ON\s+CONFLICT\(user_id,\s*post_id\)\s*DO\s+UPDATE\s+SET\s*max_read_floor\s*=\s*(?:MAX|GREATEST)\(browsing_history\.max_read_floor,\s*excluded\.max_read_floor\),\s*anchor_reply_id\s*=\s*excluded\.anchor_reply_id,\s*last_viewed_at\s*=\s*excluded\.last_viewed_at/gi,
+    'ON DUPLICATE KEY UPDATE max_read_floor = GREATEST(max_read_floor, VALUES(max_read_floor)), anchor_reply_id = VALUES(anchor_reply_id), last_viewed_at = VALUES(last_viewed_at)',
+  );
+  return normalized;
+}
+
 class NodeStatement implements PreparedStatement {
   private values: unknown[] = [];
-  constructor(private readonly db: NodeAdapter, private readonly query: string) {}
+  private readonly db: NodeAdapter;
+  private readonly query: string;
+  constructor(db: NodeAdapter, query: string) { this.db = db; this.query = query; }
   bind(...values: unknown[]): PreparedStatement { this.values = values; return this; }
   async all<T extends Record<string, unknown>>(): Promise<{ results: T[] }> {
     return { results: (await this.db.execute(this.query, this.values)).rows as T[] };
@@ -71,7 +109,9 @@ class NodeStatement implements PreparedStatement {
 
 export class NodeAdapter implements PortableDatabase {
   private readonly client: Promise<PostgresClient | MysqlConnection>;
-  constructor(private readonly driver: Exclude<SqlDriver, 'sqlite'>, url: string) {
+  private readonly driver: Exclude<SqlDriver, 'sqlite'>;
+  constructor(driver: Exclude<SqlDriver, 'sqlite'>, url: string) {
+    this.driver = driver;
     this.client = driver === 'postgres'
       ? dynamicImport('postgres').then((mod) => {
           const factory = (mod as { default: (connection: string) => PostgresClient }).default;
@@ -85,12 +125,13 @@ export class NodeAdapter implements PortableDatabase {
   prepare(query: string): PreparedStatement { return new NodeStatement(this, query); }
   async execute(query: string, values: unknown[]): Promise<{ rows: Record<string, unknown>[]; changes: number }> {
     const client = await this.client;
+    const sql = normalizeNodeSql(query, this.driver);
     if (this.driver === 'postgres') {
-      const rows = await (client as PostgresClient).unsafe(postgresPlaceholders(query), values);
+      const rows = await (client as PostgresClient).unsafe(postgresPlaceholders(sql), values);
       const count = typeof rows === 'object' && rows !== null && 'count' in rows ? Number((rows as unknown as { count?: number }).count ?? 0) : rows.length;
       return { rows, changes: count };
     }
-    const [rows, result] = await (client as MysqlConnection).execute(query, values);
+    const [rows, result] = await (client as MysqlConnection).execute(sql, values);
     const records = Array.isArray(rows) ? rows as Record<string, unknown>[] : [];
     const changes = typeof result === 'object' && result !== null && 'affectedRows' in result
       ? Number((result as { affectedRows?: number }).affectedRows ?? 0)
