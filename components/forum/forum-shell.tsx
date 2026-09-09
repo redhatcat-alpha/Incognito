@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import Link from '@/lib/static-link';
+import { usePathname } from 'next/navigation';
 import { useRegisteredUser } from '@/lib/use-registered-user';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -105,7 +105,6 @@ const levelStyle: Record<Announcement['level'], string> = {
 
 export function ForumShell({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
   const { me } = useRegisteredUser();
   const { boards, offline } = useBoardList();
   const [site, setSite] = useState<SiteSettings | null>(null);
@@ -114,7 +113,7 @@ export function ForumShell({ children, right }: { children: React.ReactNode; rig
   function runSearch(form: HTMLFormElement) {
     const raw = new FormData(form).get('q');
     const query = typeof raw === 'string' ? raw.trim() : '';
-    router.push(query ? `/search?q=${encodeURIComponent(query)}` : '/search');
+    window.location.assign(query ? `/search?q=${encodeURIComponent(query)}` : '/search');
   }
 
   function submitSearch(event: { preventDefault: () => void; currentTarget: HTMLFormElement }) {

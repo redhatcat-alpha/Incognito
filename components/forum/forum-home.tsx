@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import Link from '@/lib/static-link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowRight, ChevronRight, Clock3, Flame, History, Lock, Sparkles } from 'lucide-react';
 

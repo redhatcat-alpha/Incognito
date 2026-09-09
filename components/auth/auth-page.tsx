@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import Link from '@/lib/static-link';
+import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Ghost, Hash, ShieldCheck } from 'lucide-react';
 
@@ -10,7 +10,6 @@ import { apiJson, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 export function AuthPage() {
-  const router = useRouter();
   const params = useSearchParams();
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('');
@@ -26,12 +25,12 @@ export function AuthPage() {
     const timer = window.setTimeout(() => {
       apiJson<{ username: string } | null>('/api/v1/auth/me')
         .then((me) => {
-          if (me) router.replace(next);
+          if (me) window.location.replace(next);
         })
         .catch(() => undefined);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [router, next]);
+  }, [next]);
 
   async function submit(event: { preventDefault: () => void }) {
     event.preventDefault();
@@ -43,7 +42,7 @@ export function AuthPage() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ username: username.trim(), password }),
       });
-      router.replace(next);
+      window.location.replace(next);
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : '操作失败，请稍后重试');
     } finally {

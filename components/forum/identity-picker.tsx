@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import Link from '@/lib/static-link';
 import { Ghost, ShieldCheck } from 'lucide-react';
 
 import { cn } from '@/lib/utils';

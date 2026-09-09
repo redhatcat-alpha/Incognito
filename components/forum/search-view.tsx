@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import Link from '@/lib/static-link';
+import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { SearchX } from 'lucide-react';
 
@@ -14,7 +14,6 @@ import type { BoardSummary, PostSummary } from '@/lib/forum-types';
 type SearchResult = { query: string; total: number; posts: PostSummary[] };
 
 export function SearchView() {
-  const router = useRouter();
   const params = useSearchParams();
   const query = params.get('q') ?? '';
   const board = params.get('board') ?? '';
@@ -75,7 +74,7 @@ export function SearchView() {
     if (q.trim()) next.set('q', q.trim());
     if (b) next.set('board', b);
     if (t) next.set('tag', t);
-    router.push(next.size ? `/search?${next.toString()}` : '/search');
+    window.location.assign(next.size ? `/search?${next.toString()}` : '/search');
   };
 
   const selectedBoard = boards.find((item) => item.slug === board);

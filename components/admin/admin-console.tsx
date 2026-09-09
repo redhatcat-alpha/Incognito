@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import Link from '@/lib/static-link';
 import Image from 'next/image';
 import { useCallback, useEffect, useState } from 'react';
 import { BellRing, ClipboardList, Hash, LogOut, Megaphone, ScrollText, Send } from 'lucide-react';

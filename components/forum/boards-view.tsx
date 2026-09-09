@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import Link from '@/lib/static-link';
 import { useEffect, useState } from 'react';
 import { ArrowRight, Lock, MessageCircle } from 'lucide-react';
 

@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import Link from '@/lib/static-link';
 import { Fragment } from 'react';
 import { Lock, MessageCircle, ThumbsUp } from 'lucide-react';
 

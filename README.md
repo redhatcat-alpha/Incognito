@@ -26,7 +26,7 @@
 ## 🧱 技术栈
 
 - **应用**：Next.js App Router 兼容层（vinext）+ React 19 + TypeScript
-- **运行时**：Node.js 22 + Docker
+- **运行时**：Node.js 22（Docker 可选）
 - **数据库**：默认本地 SQLite；支持 PostgreSQL、MySQL 运行时驱动
 - **数据访问**：Drizzle ORM、统一 SQL 兼容接口
 - **编辑器**：Tiptap
@@ -107,6 +107,44 @@ docker compose -f deploy/docker-compose.yaml up --build
 
 停止服务但保留数据：`docker compose -f deploy/docker-compose.yaml down`。
 删除容器及数据卷：`docker compose -f deploy/docker-compose.yaml down -v`。
+
+## 🐧 Linux 直接部署（非 Docker）
+
+服务器已安装 Node.js `22.13+` 和 npm 后，在项目根目录执行：
+
+```bash
+chmod +x scripts/start-linux.sh
+./scripts/start-linux.sh
+```
+
+脚本会自动检查 Linux/Node/npm 环境；首次运行时执行 `npm ci`，然后进行 lint、TypeScript 和生产构建检查，执行数据库迁移，幂等初始化管理员账号，最后以后台进程启动 `dist/standalone/server.js`。默认使用 `data/incognito.sqlite` 和 `data/media/`，不会在“管理员初始化”步骤写入论坛种子内容。首次访问论坛时应用仍会按现有逻辑准备基础板块数据。
+
+管理员初始化默认值为 `admin/admin123`。建议首次启动前通过环境变量设置：
+
+```bash
+ADMIN_USERNAME=admin \
+ADMIN_PASSWORD='请替换为强密码' \
+./scripts/start-linux.sh
+```
+
+也可以把这些变量放在项目根目录 `.env` 中。PostgreSQL/MySQL 示例：
+
+```bash
+DATABASE_DRIVER=postgres \
+DATABASE_URL='postgres://user:password@127.0.0.1:5432/incognito' \
+ADMIN_PASSWORD='请替换为强密码' \
+./scripts/start-linux.sh
+```
+
+常用管理命令：
+
+```bash
+./scripts/start-linux.sh status   # 查看后台进程和端口
+./scripts/start-linux.sh restart  # 重新检查、迁移、构建并启动
+./scripts/start-linux.sh stop     # 停止当前脚本启动的进程
+```
+
+日志默认写入 `data/incognito.log`，PID 默认写入 `data/incognito.pid`。如需跳过检查（仅适合已完成构建的紧急重启），设置 `SKIP_CHECKS=1`；依赖变更后可设置 `FORCE_NPM_INSTALL=1` 强制执行 `npm ci`。
 
 ## 📁 项目结构
 

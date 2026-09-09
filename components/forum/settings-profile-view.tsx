@@ -1,7 +1,6 @@
 'use client';
 
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import Link from '@/lib/static-link';
 import { useCallback, useEffect, useState } from 'react';
 import { Fingerprint, Laptop, LogOut, ShieldCheck, Trash2 } from 'lucide-react';
 
@@ -327,7 +326,6 @@ function AccountSection({
   me: AuthMe | null;
   refresh: RegisteredUserState['refresh'];
 }) {
-  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -337,7 +335,7 @@ function AccountSection({
     try {
       await apiJson('/api/v1/auth/logout', { method: 'POST' });
       await refresh();
-      router.replace('/login');
+      window.location.replace('/login');
     } catch {
       setError('退出失败，请稍后重试');
       setBusy(false);
